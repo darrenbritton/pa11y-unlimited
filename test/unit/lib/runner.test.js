@@ -496,8 +496,8 @@ describe('lib/runner', function() {
 					returnValue = pa11y.getElementContext(element);
 				});
 
-				it('returns the element HTML with the inner HTML truncated', function() {
-					assert.strictEqual(returnValue, '<element>mock-html-that-is-longer-than-3...</element>');
+				it('returns the element HTML with the inner HTML not truncated', function() {
+					assert.strictEqual(returnValue, '<element>mock-html-that-is-longer-than-31-characters</element>');
 				});
 
 			});
@@ -512,8 +512,8 @@ describe('lib/runner', function() {
 					returnValue = pa11y.getElementContext(element);
 				});
 
-				it('returns the element HTML with the outer HTML truncated', function() {
-					assert.strictEqual(returnValue, '<element alphabetx10="abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrst...');
+				it('returns the element HTML with the outer HTML not truncated', function() {
+					assert.strictEqual(returnValue, '<element alphabetx10="abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz">mock-html</element>');
 				});
 
 			});
