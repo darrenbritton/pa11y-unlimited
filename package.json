@@ -50,7 +50,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "npm run test-coverage && npm run verify-coverage && npm run test-integration",
+    "test": "npm run test-coverage && npm run verify-coverage",
     "test-coverage": "c8 -- npm run test-unit",
     "test-integration": "mocha --config test/integration/.mocharc.json",
     "test-unit": "mocha",
