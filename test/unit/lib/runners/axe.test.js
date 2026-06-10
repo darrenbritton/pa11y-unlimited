@@ -534,7 +534,10 @@ describe('lib/runners/axe', function() {
 		beforeEach(function() {
 			element = {
 				getBoundingClientRect: sinon.stub().returns(
-					{x: 10, y: 20, width: 100, height: 30}
+					{x: 10,
+						y: 20,
+						width: 100,
+						height: 30}
 				)
 			};
 			style = {
@@ -545,8 +548,10 @@ describe('lib/runners/axe', function() {
 				backgroundColor: 'rgba(0, 0, 0, 0)',
 				getPropertyValue: sinon.stub().returns('')
 			};
-			beforeStyle = {content: 'none', color: 'rgb(0, 0, 0)'};
-			afterStyle = {content: 'none', color: 'rgb(0, 0, 0)'};
+			beforeStyle = {content: 'none',
+				color: 'rgb(0, 0, 0)'};
+			afterStyle = {content: 'none',
+				color: 'rgb(0, 0, 0)'};
 			global.window.document.querySelector = sinon.stub().returns(element);
 			// Read the closure vars lazily so per-test mutations/reassignments apply.
 			global.window.getComputedStyle = sinon.stub().callsFake((el, pseudo) => {
@@ -563,7 +568,10 @@ describe('lib/runners/axe', function() {
 		it('captures cssFg and bbox for an incomplete node', async function() {
 			const extras = await captureFor();
 			assert.strictEqual(extras.cssFg, 'rgb(10, 20, 30)');
-			assert.deepEqual(extras.bbox, {x: 10, y: 20, width: 100, height: 30});
+			assert.deepEqual(extras.bbox, {x: 10,
+				y: 20,
+				width: 100,
+				height: 30});
 		});
 
 		it('does not attach capture fields to violations', async function() {
@@ -587,19 +595,25 @@ describe('lib/runners/axe', function() {
 		});
 
 		it('extracts axeData and trimmed axeRelatedNodes from the matching check', async function() {
-			const data = {messageKey: 'bgImage', contrastRatio: 1};
+			const data = {messageKey: 'bgImage',
+				contrastRatio: 1};
 			const extras = await captureFor({
 				any: [
-					{id: 'other', data: {nope: true}, relatedNodes: []},
+					{id: 'other',
+						data: {nope: true},
+						relatedNodes: []},
 					{
 						id: 'mock-id',
 						data,
-						relatedNodes: [{target: ['rel-1'], html: '<a>', extra: 'dropped'}]
+						relatedNodes: [{target: ['rel-1'],
+							html: '<a>',
+							extra: 'dropped'}]
 					}
 				]
 			});
 			assert.deepEqual(extras.axeData, data);
-			assert.deepEqual(extras.axeRelatedNodes, [{target: ['rel-1'], html: '<a>'}]);
+			assert.deepEqual(extras.axeRelatedNodes, [{target: ['rel-1'],
+				html: '<a>'}]);
 		});
 
 		it('detects bgClip "text" and captures the gradient paint source (DEV-909)', async function() {
@@ -640,18 +654,25 @@ describe('lib/runners/axe', function() {
 		});
 
 		it('captures pseudo styles only for pseudoContent issues', async function() {
-			beforeStyle = {content: '"\\2605"', color: 'rgb(1, 2, 3)'};
+			beforeStyle = {content: '"\\2605"',
+				color: 'rgb(1, 2, 3)'};
 			const extras = await captureFor({
-				any: [{id: 'mock-id', data: {messageKey: 'pseudoContent'}, relatedNodes: []}]
+				any: [{id: 'mock-id',
+					data: {messageKey: 'pseudoContent'},
+					relatedNodes: []}]
 			});
-			assert.deepEqual(extras.pseudoBefore, {color: 'rgb(1, 2, 3)', content: '"\\2605"'});
+			assert.deepEqual(extras.pseudoBefore, {color: 'rgb(1, 2, 3)',
+				content: '"\\2605"'});
 			assert.isUndefined(extras.pseudoAfter);
 		});
 
 		it('does not read pseudo styles when messageKey is not pseudoContent', async function() {
-			beforeStyle = {content: '"\\2605"', color: 'rgb(1, 2, 3)'};
+			beforeStyle = {content: '"\\2605"',
+				color: 'rgb(1, 2, 3)'};
 			const extras = await captureFor({
-				any: [{id: 'mock-id', data: {messageKey: 'fgColor'}, relatedNodes: []}]
+				any: [{id: 'mock-id',
+					data: {messageKey: 'fgColor'},
+					relatedNodes: []}]
 			});
 			assert.isUndefined(extras.pseudoBefore);
 		});
