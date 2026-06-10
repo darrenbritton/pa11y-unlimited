@@ -1,5 +1,15 @@
 # Changelog
 
+## 9.4.0 (2026-06-10)
+
+* Resolve bare, standards-based XPath selectors (`//…`) in actions via `document.evaluate`, with no proprietary engine and identical behaviour across browsers and frames. (#2)
+* Enhance `axe` runner data capture for improved audit resolution. (#1, #6)
+* Add an `id-length` ESLint rule to enforce a minimum identifier length. (#7)
+
+### Full diff for `pa11y-unlimited@9.4.0`
+
+* [v9.3.0...v9.4.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.3.0...v9.4.0)
+
 ## 9.3.0 (2026-06-09)
 
 * Resolve native Puppeteer selectors (`::-p-aria(...)`, `aria/`, `text/`, `xpath/`, `pierce/`) in actions, so workflows can target elements by ARIA role and accessible name. Plain CSS selectors keep the original in-page behaviour unchanged. (#1, #5)
