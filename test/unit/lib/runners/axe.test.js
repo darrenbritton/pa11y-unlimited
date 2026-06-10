@@ -243,7 +243,14 @@ describe('lib/runners/axe', function() {
 						impact: 'minor',
 						needsFurtherReview: true,
 						help: 'mock help 3',
-						helpUrl: 'mock-help-url-3'
+						helpUrl: 'mock-help-url-3',
+						// Capture fields degrade to null here (mock has no getComputedStyle);
+						// populated paths are covered in the capture describe below.
+						axeData: null,
+						axeRelatedNodes: [],
+						cssFg: null,
+						bgClip: null,
+						bbox: null
 					}
 				},
 				{
@@ -256,7 +263,12 @@ describe('lib/runners/axe', function() {
 						impact: 'not a supported impact level',
 						needsFurtherReview: true,
 						help: 'mock help 4',
-						helpUrl: 'mock-help-url-4'
+						helpUrl: 'mock-help-url-4',
+						axeData: null,
+						axeRelatedNodes: [],
+						cssFg: null,
+						bgClip: null,
+						bbox: null
 					}
 				},
 				{
@@ -269,7 +281,12 @@ describe('lib/runners/axe', function() {
 						impact: 'not a supported impact level',
 						needsFurtherReview: true,
 						help: 'mock help 4',
-						helpUrl: 'mock-help-url-4'
+						helpUrl: 'mock-help-url-4',
+						axeData: null,
+						axeRelatedNodes: [],
+						cssFg: null,
+						bgClip: null,
+						bbox: null
 					}
 				},
 				{
@@ -282,7 +299,12 @@ describe('lib/runners/axe', function() {
 						impact: 'moderate',
 						needsFurtherReview: true,
 						help: 'mock help 5',
-						helpUrl: 'mock-help-url-5'
+						helpUrl: 'mock-help-url-5',
+						axeData: null,
+						axeRelatedNodes: [],
+						cssFg: null,
+						bgClip: null,
+						bbox: null
 					}
 				}
 			]);
@@ -477,6 +499,191 @@ describe('lib/runners/axe', function() {
 
 		});
 
+	});
+
+	describe('.run(options, pa11y) runnerExtras capture for incomplete issues', function() {
+		let element;
+		let style;
+		let beforeStyle;
+		let afterStyle;
+
+		// One incomplete issue whose single node carries the given checks
+		// (e.g. {any: [...]}). The selector resolves to `element`.
+		function incomplete(checks) {
+			return {
+				violations: [],
+				incomplete: [
+					{
+						id: 'mock-id',
+						description: 'd',
+						impact: 'minor',
+						help: 'h',
+						helpUrl: 'u',
+						nodes: [Object.assign({target: ['mock-selector']}, checks)]
+					}
+				]
+			};
+		}
+
+		async function captureFor(checks) {
+			global.window.axe.run = sinon.stub().resolves(incomplete(checks));
+			const resolved = await runner.run({}, {});
+			return resolved[0].runnerExtras;
+		}
+
+		beforeEach(function() {
+			element = {
+				getBoundingClientRect: sinon.stub().returns(
+					{x: 10,
+						y: 20,
+						width: 100,
+						height: 30}
+				)
+			};
+			style = {
+				color: 'rgb(10, 20, 30)',
+				backgroundClip: 'border-box',
+				webkitBackgroundClip: '',
+				backgroundImage: 'none',
+				backgroundColor: 'rgba(0, 0, 0, 0)',
+				getPropertyValue: sinon.stub().returns('')
+			};
+			beforeStyle = {content: 'none',
+				color: 'rgb(0, 0, 0)'};
+			afterStyle = {content: 'none',
+				color: 'rgb(0, 0, 0)'};
+			global.window.document.querySelector = sinon.stub().returns(element);
+			// Read the closure vars lazily so per-test mutations/reassignments apply.
+			global.window.getComputedStyle = sinon.stub().callsFake((el, pseudo) => {
+				if (pseudo === '::before') {
+					return beforeStyle;
+				}
+				if (pseudo === '::after') {
+					return afterStyle;
+				}
+				return style;
+			});
+		});
+
+		it('captures cssFg and bbox for an incomplete node', async function() {
+			const extras = await captureFor();
+			assert.strictEqual(extras.cssFg, 'rgb(10, 20, 30)');
+			assert.deepEqual(extras.bbox, {x: 10,
+				y: 20,
+				width: 100,
+				height: 30});
+		});
+
+		it('does not attach capture fields to violations', async function() {
+			global.window.axe.run = sinon.stub().resolves({
+				violations: [
+					{
+						id: 'v',
+						description: 'd',
+						impact: 'critical',
+						help: 'h',
+						helpUrl: 'u',
+						nodes: [{target: ['mock-selector']}]
+					}
+				],
+				incomplete: []
+			});
+			const extras = (await runner.run({}, {}))[0].runnerExtras;
+			assert.isUndefined(extras.cssFg);
+			assert.isUndefined(extras.bbox);
+			assert.isUndefined(extras.axeData);
+		});
+
+		it('extracts axeData and trimmed axeRelatedNodes from the matching check', async function() {
+			const data = {messageKey: 'bgImage',
+				contrastRatio: 1};
+			const extras = await captureFor({
+				any: [
+					{id: 'other',
+						data: {nope: true},
+						relatedNodes: []},
+					{
+						id: 'mock-id',
+						data,
+						relatedNodes: [{target: ['rel-1'],
+							html: '<a>',
+							extra: 'dropped'}]
+					}
+				]
+			});
+			assert.deepEqual(extras.axeData, data);
+			assert.deepEqual(extras.axeRelatedNodes, [{target: ['rel-1'],
+				html: '<a>'}]);
+		});
+
+		it('detects bgClip "text" and captures the gradient paint source (DEV-909)', async function() {
+			style.backgroundClip = 'text';
+			style.backgroundImage =
+				'linear-gradient(to right, rgb(4, 120, 87), rgb(234, 88, 12))';
+			style.backgroundColor = 'rgb(255, 255, 255)';
+			const extras = await captureFor();
+			assert.strictEqual(extras.bgClip, 'text');
+			assert.strictEqual(
+				extras.bgImage,
+				'linear-gradient(to right, rgb(4, 120, 87), rgb(234, 88, 12))'
+			);
+			assert.strictEqual(extras.bgColor, 'rgb(255, 255, 255)');
+		});
+
+		it('detects bgClip "text" via -webkit-background-clip', async function() {
+			style.backgroundClip = 'border-box';
+			style.webkitBackgroundClip = 'text';
+			style.backgroundImage =
+				'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
+			const extras = await captureFor();
+			assert.strictEqual(extras.bgClip, 'text');
+			assert.strictEqual(
+				extras.bgImage,
+				'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))'
+			);
+		});
+
+		it('does not capture a paint source when not clipped to text', async function() {
+			style.backgroundClip = 'border-box';
+			style.backgroundImage =
+				'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
+			const extras = await captureFor();
+			assert.strictEqual(extras.bgClip, 'border-box');
+			assert.isUndefined(extras.bgImage);
+			assert.isUndefined(extras.bgColor);
+		});
+
+		it('captures pseudo styles only for pseudoContent issues', async function() {
+			beforeStyle = {content: '"\\2605"',
+				color: 'rgb(1, 2, 3)'};
+			const extras = await captureFor({
+				any: [{id: 'mock-id',
+					data: {messageKey: 'pseudoContent'},
+					relatedNodes: []}]
+			});
+			assert.deepEqual(extras.pseudoBefore, {color: 'rgb(1, 2, 3)',
+				content: '"\\2605"'});
+			assert.isUndefined(extras.pseudoAfter);
+		});
+
+		it('does not read pseudo styles when messageKey is not pseudoContent', async function() {
+			beforeStyle = {content: '"\\2605"',
+				color: 'rgb(1, 2, 3)'};
+			const extras = await captureFor({
+				any: [{id: 'mock-id',
+					data: {messageKey: 'fgColor'},
+					relatedNodes: []}]
+			});
+			assert.isUndefined(extras.pseudoBefore);
+		});
+
+		it('degrades to null fields when a DOM read throws', async function() {
+			global.window.getComputedStyle = sinon.stub().throws(new Error('detached'));
+			const extras = await captureFor();
+			assert.isNull(extras.cssFg);
+			assert.isNull(extras.bgClip);
+			assert.isNull(extras.bbox);
+		});
 	});
 
 });
