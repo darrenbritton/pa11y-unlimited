@@ -1883,6 +1883,28 @@ describe('lib/action', function() {
 				assert.isFalse(runAction.usesNativeSelectorEngine('button[aria-label="x"]'));
 			});
 
+			it('returns false for a bare XPath (it is not a Puppeteer-engine selector)', function() {
+				assert.isFalse(runAction.usesNativeSelectorEngine('//button[normalize-space(.)="Go"]'));
+			});
+
+		});
+
+		describe('.usesBareXPathEngine(selector)', function() {
+
+			it('returns true for bare XPath selectors', function() {
+				assert.isTrue(runAction.usesBareXPathEngine('//button[normalize-space(.)="Allow all cookies"]'));
+				assert.isTrue(runAction.usesBareXPathEngine('//*[@role="dialog"]//button'));
+				assert.isTrue(runAction.usesBareXPathEngine('/html/body/div[2]/button'));
+				assert.isTrue(runAction.usesBareXPathEngine('  //button'));
+			});
+
+			it('returns false for CSS and Puppeteer-native selectors', function() {
+				assert.isFalse(runAction.usesBareXPathEngine('#bar'));
+				assert.isFalse(runAction.usesBareXPathEngine('button[aria-label="x"]'));
+				assert.isFalse(runAction.usesBareXPathEngine('xpath///button'));
+				assert.isFalse(runAction.usesBareXPathEngine('::-p-aria(Go[role="button"])'));
+			});
+
 		});
 
 		describe('set-field-value with a native selector', function() {
@@ -2184,6 +2206,188 @@ describe('lib/action', function() {
 					assert.instanceOf(rejectedError, Error);
 					assert.strictEqual(rejectedError.message, `Failed action: no element matching selector "${selector}"`);
 					assert.called(puppeteer.mockElementHandle.dispose);
+				});
+			});
+		});
+
+	});
+
+	describe('bare XPath (document.evaluate) selector support', function() {
+
+		describe('click-element with a bare XPath', function() {
+			let action;
+			let matches;
+			const selector = '//button[normalize-space(.)="Allow all cookies"]';
+
+			beforeEach(async function() {
+				action = runAction.actions.find(foundAction => foundAction.name === 'click-element');
+				matches = `click element ${selector}`.match(action.match);
+				await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+			});
+
+			it('resolves a handle via evaluateHandle and clicks it, not page.click', function() {
+				assert.calledOnce(puppeteer.mockPage.evaluateHandle);
+				assert.strictEqual(puppeteer.mockPage.evaluateHandle.firstCall.args[1], selector);
+				assert.isFunction(puppeteer.mockPage.evaluateHandle.firstCall.args[0]);
+				assert.notCalled(puppeteer.mockPage.click);
+				assert.calledOnce(puppeteer.mockElementHandle.click);
+				assert.calledOnce(puppeteer.mockElementHandle.dispose);
+			});
+
+			describe('the page-side resolver function', function() {
+				let originalDocument;
+				let originalXPathResult;
+				let mockNode;
+				let result;
+
+				beforeEach(function() {
+					originalDocument = global.document;
+					originalXPathResult = global.XPathResult;
+					mockNode = {nodeType: 1};
+					global.XPathResult = {FIRST_ORDERED_NODE_TYPE: 9};
+					global.document = {
+						evaluate: sinon.stub().returns({singleNodeValue: mockNode})
+					};
+					result = puppeteer.mockPage.evaluateHandle.firstCall.args[0]('//button');
+				});
+
+				afterEach(function() {
+					global.document = originalDocument;
+					global.XPathResult = originalXPathResult;
+				});
+
+				it('evaluates the xpath and returns the first matching node', function() {
+					assert.calledWithExactly(global.document.evaluate, '//button', global.document, null, 9, null);
+					assert.strictEqual(result, mockNode);
+				});
+			});
+
+			describe('when no element matches the xpath', function() {
+				let rejectedError;
+
+				beforeEach(async function() {
+					puppeteer.mockJSHandle.asElement.returns(null);
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('disposes the JS handle and rejects with the standard no-element error', function() {
+					assert.instanceOf(rejectedError, Error);
+					assert.strictEqual(rejectedError.message, `Failed action: no element matching selector "${selector}"`);
+					assert.called(puppeteer.mockJSHandle.dispose);
+				});
+			});
+
+			describe('when the click fails', function() {
+				let rejectedError;
+
+				beforeEach(async function() {
+					puppeteer.mockElementHandle.click.rejects(new Error('click error'));
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('rejects with the standard no-element error and still disposes the handle', function() {
+					assert.instanceOf(rejectedError, Error);
+					assert.strictEqual(rejectedError.message, `Failed action: no element matching selector "${selector}"`);
+					assert.called(puppeteer.mockElementHandle.dispose);
+				});
+			});
+		});
+
+		describe('set-field-value with a bare XPath', function() {
+			let action;
+			const selector = '//input[@name="email"]';
+
+			beforeEach(async function() {
+				action = runAction.actions.find(foundAction => foundAction.name === 'set-field-value');
+				const matches = `set field ${selector} to bar`.match(action.match);
+				await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+			});
+
+			it('resolves via evaluateHandle and sets the value on the handle', function() {
+				assert.calledOnce(puppeteer.mockPage.evaluateHandle);
+				assert.notCalled(puppeteer.mockPage.$);
+				assert.notCalled(puppeteer.mockPage.evaluate);
+				assert.calledOnce(puppeteer.mockElementHandle.evaluate);
+				assert.strictEqual(puppeteer.mockElementHandle.evaluate.firstCall.args[1], 'bar');
+				assert.calledOnce(puppeteer.mockElementHandle.dispose);
+			});
+		});
+
+		describe('wait-for-element-state with a bare XPath', function() {
+			let action;
+			const selector = '//button[normalize-space(.)="Allow all cookies"]';
+
+			beforeEach(function() {
+				action = runAction.actions.find(foundAction => foundAction.name === 'wait-for-element-state');
+			});
+
+			it('waits via page.waitForFunction, not Puppeteer waitForSelector', async function() {
+				const matches = `wait for element ${selector} to be visible`.match(action.match);
+				await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+				assert.notCalled(puppeteer.mockPage.waitForSelector);
+				assert.calledOnce(puppeteer.mockPage.waitForFunction);
+				const {args} = puppeteer.mockPage.waitForFunction.firstCall;
+				assert.isFunction(args[0]);
+				assert.deepEqual(args[1], {polling: 200,
+					timeout: 30000});
+				assert.strictEqual(args[2], selector);
+				assert.strictEqual(args[3], 'visible');
+			});
+
+			describe('the page-side predicate', function() {
+				let originalDocument;
+				let originalXPathResult;
+				let predicate;
+
+				function stubElement(node) {
+					global.document = {
+						evaluate: sinon.stub().returns({singleNodeValue: node})
+					};
+				}
+
+				beforeEach(async function() {
+					originalDocument = global.document;
+					originalXPathResult = global.XPathResult;
+					global.XPathResult = {FIRST_ORDERED_NODE_TYPE: 9};
+					const matches = `wait for element ${selector} to be visible`.match(action.match);
+					await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					predicate = puppeteer.mockPage.waitForFunction.firstCall.args[0];
+				});
+
+				afterEach(function() {
+					global.document = originalDocument;
+					global.XPathResult = originalXPathResult;
+				});
+
+				it('is true for "visible" when the element has layout boxes', function() {
+					stubElement({offsetWidth: 10,
+						offsetHeight: 10,
+						getClientRects: () => [{}]});
+					assert.isTrue(predicate(selector, 'visible'));
+				});
+
+				it('is false for "visible" when the element has no layout boxes', function() {
+					stubElement({offsetWidth: 0,
+						offsetHeight: 0,
+						getClientRects: () => []});
+					assert.isFalse(predicate(selector, 'visible'));
+				});
+
+				it('is true for "added" when the element exists and "removed" when it does not', function() {
+					stubElement({offsetWidth: 1,
+						offsetHeight: 1,
+						getClientRects: () => [{}]});
+					assert.isTrue(predicate(selector, 'added'));
+					stubElement(null);
+					assert.isTrue(predicate(selector, 'removed'));
 				});
 			});
 		});
