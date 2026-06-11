@@ -877,12 +877,12 @@ describe('lib/action', function() {
 				let originalDocument;
 
 				beforeEach(async function() {
-					mockElement = createMockElement();
+					mockElement = createMockElement({click: sinon.stub()});
 					originalDocument = global.document;
 					global.document = {
 						querySelector: sinon.stub().returns(mockElement)
 					};
-					resolvedValue = await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-checked');
+					resolvedValue = await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', true);
 				});
 
 				afterEach(function() {
@@ -894,21 +894,54 @@ describe('lib/action', function() {
 					assert.calledWithExactly(global.document.querySelector, 'mock-selector');
 				});
 
-				it('sets the element `checked` property to the passed in checked value', function() {
-					assert.strictEqual(mockElement.checked, 'mock-checked');
+				it('clicks the element to drive a controlled change handler', function() {
+					assert.calledOnce(mockElement.click);
 				});
 
-				it('triggers a change event on the element', function() {
-					assert.calledOnce(Event);
-					assert.calledWithExactly(Event, 'change', {
-						bubbles: true
-					});
-					assert.calledOnce(mockElement.dispatchEvent);
-					assert.calledWithExactly(mockElement.dispatchEvent, mockEvent);
+				it('forces the value and dispatches input + change when the click does not settle it', function() {
+					// Mock click is a no-op, so checked stays unsettled and the fallback runs.
+					assert.strictEqual(mockElement.checked, true);
+					assert.calledTwice(Event);
+					assert.calledWithExactly(Event, 'input', {bubbles: true});
+					assert.calledWithExactly(Event, 'change', {bubbles: true});
+					assert.calledTwice(mockElement.dispatchEvent);
 				});
 
 				it('resolves with `undefined`', function() {
 					assert.isUndefined(resolvedValue);
+				});
+
+				describe('when the click settles the checked state', function() {
+					beforeEach(async function() {
+						Event.resetHistory();
+						mockElement = createMockElement();
+						mockElement.click = sinon.stub().callsFake(() => {
+							mockElement.checked = true;
+						});
+						global.document.querySelector.returns(mockElement);
+						await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', true);
+					});
+
+					it('does not fall back to forcing the value', function() {
+						assert.calledOnce(mockElement.click);
+						assert.notCalled(mockElement.dispatchEvent);
+						assert.notCalled(Event);
+					});
+				});
+
+				describe('when the element is already in the desired state', function() {
+					beforeEach(async function() {
+						Event.resetHistory();
+						mockElement = createMockElement({checked: true,
+							click: sinon.stub()});
+						global.document.querySelector.returns(mockElement);
+						await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', true);
+					});
+
+					it('neither clicks nor dispatches events', function() {
+						assert.notCalled(mockElement.click);
+						assert.notCalled(mockElement.dispatchEvent);
+					});
 				});
 
 				describe('when an element with the given selector cannot be found', function() {
@@ -917,7 +950,7 @@ describe('lib/action', function() {
 					beforeEach(async function() {
 						global.document.querySelector.returns(null);
 						try {
-							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-checked');
+							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', true);
 						} catch (error) {
 							rejectedError = error;
 						}
@@ -926,9 +959,7 @@ describe('lib/action', function() {
 					it('rejects with an error', function() {
 						assert.instanceOf(rejectedError, Error);
 					});
-
 				});
-
 			});
 
 			it('resolves with `undefined`', function() {
@@ -2076,11 +2107,22 @@ describe('lib/action', function() {
 				assert.calledOnce(puppeteer.mockElementHandle.dispose);
 			});
 
-			it('sets checked and dispatches a change event when the function runs', async function() {
-				const mockElement = createMockElement();
+			it('clicks then forces the value when the click does not settle it', async function() {
+				const mockElement = createMockElement({click: sinon.stub()});
 				await puppeteer.mockElementHandle.evaluate.firstCall.args[0](mockElement, true);
+				assert.calledOnce(mockElement.click);
 				assert.strictEqual(mockElement.checked, true);
 				assert.calledWithExactly(mockElement.dispatchEvent, mockEvent);
+			});
+
+			it('relies on the click alone when it settles the checked state', async function() {
+				const mockElement = createMockElement();
+				mockElement.click = sinon.stub().callsFake(() => {
+					mockElement.checked = true;
+				});
+				await puppeteer.mockElementHandle.evaluate.firstCall.args[0](mockElement, true);
+				assert.calledOnce(mockElement.click);
+				assert.notCalled(mockElement.dispatchEvent);
 			});
 		});
 
