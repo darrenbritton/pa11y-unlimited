@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.4.1 (2026-06-12)
+
+* Select controlled (React/MUI) checkboxes and radios via click in the `check field` action, falling back to forcing the value via the native setter only when a click can't achieve the desired state. (#8)
+
+### Full diff for `pa11y-unlimited@9.4.1`
+
+* [v9.4.0...v9.4.1](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.4.0...v9.4.1)
+
 ## 9.4.0 (2026-06-10)
 
 * Resolve bare, standards-based XPath selectors (`//…`) in actions via `document.evaluate`, with no proprietary engine and identical behaviour across browsers and frames. (#2)
