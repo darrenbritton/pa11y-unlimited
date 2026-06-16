@@ -2511,9 +2511,7 @@ describe('lib/action', function() {
 		});
 	});
 
-	// DEV-922: drive actions through iframes so an audit can progress past
-	// controls hosted in a child frame (e.g. an embedded login).
-	describe('frame-aware element resolution (DEV-922)', function() {
+	describe('frame-aware element resolution', function() {
 
 		function mockHandle(overrides) {
 			return Object.assign({
