@@ -2511,4 +2511,163 @@ describe('lib/action', function() {
 		});
 	});
 
+	describe('frame-aware element resolution', function() {
+
+		function mockHandle(overrides) {
+			return Object.assign({
+				dispose: sinon.stub().resolves(),
+				isVisible: sinon.stub().resolves(true)
+			}, overrides);
+		}
+
+		function mockContext(overrides) {
+			return Object.assign({
+				$: sinon.stub().resolves(null),
+				evaluate: sinon.stub().resolves(false),
+				evaluateHandle: sinon.stub(),
+				waitForFunction: sinon.stub().resolves()
+			}, overrides);
+		}
+
+		// A page whose mainFrame is itself and that exposes the given child frames.
+		function mockFramedPage(mainOverrides, childFrames = []) {
+			const page = mockContext(mainOverrides);
+			page.mainFrame = sinon.stub().returns(page);
+			page.frames = sinon.stub().returns([page, ...childFrames]);
+			page.getDefaultTimeout = sinon.stub().returns(30000);
+			return page;
+		}
+
+		describe('resolveActionContext()', function() {
+
+			it('returns the page unchanged when frames() is unavailable', async function() {
+				const page = mockContext();
+				const context = await runAction.resolveActionContext(page, '#email');
+				assert.strictEqual(context, page);
+			});
+
+			it('returns the page when the selector resolves in the main frame', async function() {
+				const page = mockFramedPage({$: sinon.stub().resolves(mockHandle())});
+				const context = await runAction.resolveActionContext(page, '#email');
+				assert.strictEqual(context, page);
+			});
+
+			it('returns the child frame when the selector lives in an iframe', async function() {
+				const child = mockContext({$: sinon.stub().resolves(mockHandle())});
+				const page = mockFramedPage({$: sinon.stub().resolves(null)}, [child]);
+				const context = await runAction.resolveActionContext(page, '#email');
+				assert.strictEqual(context, child);
+			});
+
+			it('falls back to the page when the selector is found nowhere', async function() {
+				const child = mockContext({$: sinon.stub().resolves(null)});
+				const page = mockFramedPage({$: sinon.stub().resolves(null)}, [child]);
+				const context = await runAction.resolveActionContext(page, '#missing');
+				assert.strictEqual(context, page);
+			});
+
+			it('treats a throwing $ as a miss and keeps searching frames', async function() {
+				const child = mockContext({$: sinon.stub().resolves(mockHandle())});
+				const page = mockFramedPage({$: sinon.stub().rejects(new Error('detached'))}, [child]);
+				const context = await runAction.resolveActionContext(page, '#email');
+				assert.strictEqual(context, child);
+			});
+
+			it('resolves a bare XPath inside a child frame via document.evaluate', async function() {
+				const miss = {
+					asElement: () => null,
+					dispose: sinon.stub().resolves()
+				};
+				const hit = {
+					asElement: () => mockHandle(),
+					dispose: sinon.stub().resolves()
+				};
+				const child = mockContext({evaluateHandle: sinon.stub().resolves(hit)});
+				const page = mockFramedPage({evaluateHandle: sinon.stub().resolves(miss)}, [child]);
+				const context = await runAction.resolveActionContext(page, '//input[@id="email"]');
+				assert.strictEqual(context, child);
+			});
+
+		});
+
+		describe('waitForElementState()', function() {
+
+			it('uses the single-frame waitForFunction path when there are no frames', async function() {
+				const page = mockContext();
+				await runAction.waitForElementState(page, '.foo', 'added');
+				assert.calledOnce(page.waitForFunction);
+			});
+
+			it('picks up an element in an iframe attached after the wait begins', async function() {
+				// Starts with only the main frame, then a child frame holding the
+				// element attaches mid-wait (e.g. a click that opens a login iframe).
+				const child = mockContext({evaluate: sinon.stub().resolves(true)});
+				const page = mockFramedPage({evaluate: sinon.stub().resolves(false)});
+				page.frames.onFirstCall().returns([page]);
+				page.frames.returns([page, child]);
+				await runAction.waitForElementState(page, '#email', 'visible');
+				assert.isTrue(child.evaluate.called);
+				assert.isFalse(page.waitForFunction.called);
+			});
+
+			it('resolves once a CSS selector becomes visible in any frame', async function() {
+				const child = mockContext({evaluate: sinon.stub().resolves(true)});
+				const page = mockFramedPage({evaluate: sinon.stub().resolves(false)}, [child]);
+				await runAction.waitForElementState(page, '#email', 'visible');
+				assert.isFalse(page.waitForFunction.called);
+			});
+
+			it('resolves a native selector via the frame ElementHandle', async function() {
+				const child = mockContext({$: sinon.stub().resolves(mockHandle())});
+				const page = mockFramedPage({$: sinon.stub().resolves(null)}, [child]);
+				await runAction.waitForElementState(page, 'aria/Email', 'added');
+				assert.calledOnce(child.$);
+			});
+
+			it('uses boundingBox when ElementHandle.isVisible is unavailable', async function() {
+				const handle = mockHandle({
+					isVisible: undefined,
+					boundingBox: sinon.stub().resolves({x: 0})
+				});
+				const child = mockContext({$: sinon.stub().resolves(handle)});
+				const page = mockFramedPage({$: sinon.stub().resolves(null)}, [child]);
+				await runAction.waitForElementState(page, 'aria/Email', 'visible');
+				assert.calledOnce(handle.boundingBox);
+			});
+
+			it('treats a removed native element as satisfied across every frame', async function() {
+				const child = mockContext({$: sinon.stub().resolves(null)});
+				const page = mockFramedPage({$: sinon.stub().resolves(null)}, [child]);
+				await runAction.waitForElementState(page, 'aria/Email', 'removed');
+				assert.calledOnce(child.$);
+			});
+
+			it('ignores a frame whose evaluate throws and resolves from another', async function() {
+				const child = mockContext({evaluate: sinon.stub().resolves(true)});
+				const page = mockFramedPage({evaluate: sinon.stub().rejects(new Error('x'))}, [child]);
+				await runAction.waitForElementState(page, '#email', 'visible');
+				assert.isTrue(child.evaluate.called);
+			});
+
+			it('rejects with a timeout error when no frame satisfies the state', async function() {
+				const child = mockContext({evaluate: sinon.stub().resolves(false)});
+				const page = mockFramedPage({evaluate: sinon.stub().resolves(false)}, [child]);
+				page.getDefaultTimeout = sinon.stub().returns(10);
+				let rejectedError;
+				try {
+					await runAction.waitForElementState(page, '#email', 'visible');
+				} catch (error) {
+					rejectedError = error;
+				}
+				assert.instanceOf(rejectedError, Error);
+				assert.strictEqual(
+					rejectedError.message,
+					'Failed action: timed out waiting for element "#email" to be visible'
+				);
+			});
+
+		});
+
+	});
+
 });
