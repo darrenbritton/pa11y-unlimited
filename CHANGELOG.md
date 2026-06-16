@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.5.0 (2026-06-16)
+
+* Drive actions through iframes during audits: element actions (`click`, `set field`, `clear field`, `check field`) resolve in the child frame that holds the selector, and `wait for element` polls across frames — including a frame attached mid-wait — so an audit can progress past controls hosted in an iframe such as an embedded login. (#9)
+
+### Full diff for `pa11y-unlimited@9.5.0`
+
+* [v9.4.1...v9.5.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.4.1...v9.5.0)
+
 ## 9.4.1 (2026-06-12)
 
 * Select controlled (React/MUI) checkboxes and radios via click in the `check field` action, falling back to forcing the value via the native setter only when a click can't achieve the desired state. (#8)
