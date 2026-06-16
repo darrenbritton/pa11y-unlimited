@@ -2598,10 +2598,16 @@ describe('lib/action', function() {
 				assert.calledOnce(page.waitForFunction);
 			});
 
-			it('uses the single-frame path when only the main frame exists', async function() {
-				const page = mockFramedPage();
-				await runAction.waitForElementState(page, '.foo', 'visible');
-				assert.calledOnce(page.waitForFunction);
+			it('picks up an element in an iframe attached after the wait begins', async function() {
+				// Starts with only the main frame, then a child frame holding the
+				// element attaches mid-wait (e.g. a click that opens a login iframe).
+				const child = mockContext({evaluate: sinon.stub().resolves(true)});
+				const page = mockFramedPage({evaluate: sinon.stub().resolves(false)});
+				page.frames.onFirstCall().returns([page]);
+				page.frames.returns([page, child]);
+				await runAction.waitForElementState(page, '#email', 'visible');
+				assert.isTrue(child.evaluate.called);
+				assert.isFalse(page.waitForFunction.called);
 			});
 
 			it('resolves once a CSS selector becomes visible in any frame', async function() {
