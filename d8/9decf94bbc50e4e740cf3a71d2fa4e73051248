@@ -1,0 +1,26 @@
+lib/runners/axe.js
+  h_ed136440040bc3 203,216
+  s_dffad5df7ea190::t_79db1bda8e506f 221,223-224,229,231-232
+  s_dffad5df7ea190::t_1da25c8650b223 204,217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "d89decf94bbc50e4e740cf3a71d2fa4e73051248",
+  "prompts": {},
+  "humans": {
+    "h_ed136440040bc3": {
+      "author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  },
+  "sessions": {
+    "s_dffad5df7ea190": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "380d2ef0-d454-446d-b103-86c26cb39f36",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  }
+}
