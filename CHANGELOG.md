@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.6.0 (2026-06-30)
+
+* Capture cumulative element/ancestor `opacity` on incomplete nodes — multiplied up the DOM chain — and each `::before`/`::after` pseudo-element's own opacity, so the post-audit colour-contrast resolver folds faded text into the foreground alpha instead of over-rating low-opacity text as a pass. (DEV-916, DEV-912)
+
+### Full diff for `pa11y-unlimited@9.6.0`
+
+* [v9.5.0...v9.6.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.5.0...v9.6.0)
+
 ## 9.5.0 (2026-06-16)
 
 * Drive actions through iframes during audits: element actions (`click`, `set field`, `clear field`, `check field`) resolve in the child frame that holds the selector, and `wait for element` polls across frames — including a frame attached mid-wait — so an audit can progress past controls hosted in an iframe such as an embedded login. (#9)
