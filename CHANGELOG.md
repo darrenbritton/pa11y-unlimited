@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.6.1 (2026-06-30)
+
+* Capture the `::placeholder` colour (and its own opacity) for an empty `<input>`/`<textarea>` — where the placeholder is the only visible text and the element's `color` styles the never-painted typed value — so the post-audit colour-contrast resolver measures the visible placeholder instead of false-passing on the unpainted `color`. (DEV-917)
+
+### Full diff for `pa11y-unlimited@9.6.1`
+
+* [v9.6.0...v9.6.1](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.6.0...v9.6.1)
+
 ## 9.6.0 (2026-06-30)
 
 * Capture cumulative element/ancestor `opacity` on incomplete nodes — multiplied up the DOM chain — and each `::before`/`::after` pseudo-element's own opacity, so the post-audit colour-contrast resolver folds faded text into the foreground alpha instead of over-rating low-opacity text as a pass. (DEV-916, DEV-912)
