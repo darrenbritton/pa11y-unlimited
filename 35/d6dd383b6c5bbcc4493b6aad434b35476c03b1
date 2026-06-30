@@ -1,0 +1,24 @@
+CHANGELOG.md
+  s_7921ca4e1e7aee::t_602c0c886d947e 3-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.4",
+  "base_commit_sha": "35d6dd383b6c5bbcc4493b6aad434b35476c03b1",
+  "prompts": {},
+  "humans": {
+    "h_ed136440040bc3": {
+      "author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  },
+  "sessions": {
+    "s_7921ca4e1e7aee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5da09414-b713-4a49-b275-b31ff22861fc",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  }
+}
