@@ -1,0 +1,21 @@
+package-lock.json
+  s_f914ca711f2a2e::t_d9ec46f4525419 3,9
+package.json
+  s_f914ca711f2a2e::t_b7a733c4dc3558 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5b77fd0b47f899060a8a4379b876e9082a4e99db",
+  "prompts": {},
+  "sessions": {
+    "s_f914ca711f2a2e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2bb7f3d-3cdf-4ad1-a506-387ede30039f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  }
+}
