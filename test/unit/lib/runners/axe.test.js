@@ -686,4 +686,369 @@ describe('lib/runners/axe', function() {
 		});
 	});
 
+	describe('lib/runners/axe background detection', function() {
+		let originalWindow;
+		let runner;
+		let styleMap;
+
+		function fakeStyle(overrides = {}) {
+			return Object.assign({
+				color: 'rgb(255, 255, 255)',
+				backgroundClip: 'border-box',
+				webkitBackgroundClip: '',
+				backgroundImage: 'none',
+				backgroundColor: 'rgba(0, 0, 0, 0)',
+				opacity: '1',
+				display: 'block',
+				visibility: 'visible',
+				position: 'static',
+				overflow: 'visible',
+				content: 'none',
+				getPropertyValue: () => ''
+			}, overrides);
+		}
+
+		function fakeEl(config = {}) {
+			const rect = config.rect || {x: 10,
+				y: 10,
+				width: 100,
+				height: 30};
+			const el = {
+				nodeType: 1,
+				tagName: config.tagName || 'DIV',
+				parentElement: config.parentElement || null,
+				textContent: config.textContent || '',
+				complete: config.complete,
+				naturalWidth: config.naturalWidth,
+				readyState: config.readyState,
+				value: config.value,
+				placeholder: config.placeholder,
+				mediaChildren: config.media || [],
+				lazyChildren: config.lazies || [],
+				slotChildren: config.slots || [],
+				innerMedia: config.innerMedia || null,
+				getBoundingClientRect() {
+					return {
+						x: rect.x,
+						y: rect.y,
+						width: rect.width,
+						height: rect.height,
+						left: rect.x,
+						top: rect.y,
+						right: rect.x + rect.width,
+						bottom: rect.y + rect.height
+					};
+				},
+				contains() {
+					return false;
+				},
+				getAttribute(name) {
+					return (config.attrs || {})[name] || null;
+				},
+				hasAttribute(name) {
+					return Boolean(config.attrs && Object.prototype.hasOwnProperty.call(config.attrs, name));
+				},
+				querySelectorAll(selector) {
+					if (selector.indexOf('data-src') !== -1) {
+						return el.lazyChildren;
+					}
+					if (selector.indexOf('picture') !== -1) {
+						return el.slotChildren;
+					}
+					return el.mediaChildren;
+				},
+				querySelector() {
+					return el.innerMedia;
+				}
+			};
+			el.placeholderStyle = config.placeholderStyle || null;
+			styleMap.set(el, fakeStyle(config.style));
+			return el;
+		}
+
+		async function detect(element, options = {}) {
+			global.window.innerWidth = options.innerWidth || 1000;
+			global.window.innerHeight = options.innerHeight || 800;
+			global.window.document.elementsFromPoint = sinon.stub().returns(options.elementsFromPoint || []);
+			global.window.document.querySelector = sinon.stub().returns(element);
+			const check = {
+				id: 'color-contrast',
+				data: {messageKey: options.messageKey || 'bgColor'},
+				relatedNodes: []
+			};
+			global.window.axe.run = sinon.stub().resolves({
+				violations: [],
+				incomplete: [
+					{
+						id: 'color-contrast',
+						description: 'd',
+						impact: 'serious',
+						help: 'h',
+						helpUrl: 'u',
+						nodes: [{target: ['sel'],
+							any: [check]}]
+					}
+				]
+			});
+			const resolved = await runner.run({}, {});
+			return resolved[0].runnerExtras;
+		}
+
+		beforeEach(function() {
+			styleMap = new Map();
+			originalWindow = global.window;
+			global.window = {
+				axe: {
+					run: sinon.stub(),
+					getRules: sinon.stub().returns([])
+				},
+				document: {
+					querySelector: sinon.stub(),
+					documentElement: {nodeType: 9,
+						querySelectorAll: () => [],
+						getAttribute: () => null},
+					body: {nodeType: 1,
+						querySelectorAll: () => [],
+						getAttribute: () => null}
+				}
+			};
+			global.window.getComputedStyle = sinon.stub().callsFake((el, pseudo) => {
+				if (pseudo === '::placeholder') {
+					return (el && el.placeholderStyle) || fakeStyle();
+				}
+				if (pseudo === '::before' || pseudo === '::after') {
+					return fakeStyle({content: 'none'});
+				}
+				return styleMap.get(el) || fakeStyle();
+			});
+			runner = require('../../../../lib/runners/axe');
+		});
+
+		afterEach(function() {
+			global.window = originalWindow;
+		});
+
+		it('stamps bgDetectVersion on every color-contrast incomplete', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDetectVersion, 'geom-1');
+		});
+
+		it('flags a stacked <video> that has not decoded a frame (bgMediaReady false)', async function() {
+			const video = fakeEl({tagName: 'VIDEO',
+				readyState: 1});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			const extras = await detect(el, {elementsFromPoint: [video]});
+			assert.isTrue(extras.bgImageBehind);
+			assert.strictEqual(extras.bgMediaType, 'video');
+			assert.isFalse(extras.bgMediaReady);
+		});
+
+		it('treats a stacked url() background layer as an image with no observable load state', async function() {
+			const urlLayer = fakeEl({style: {backgroundImage: 'url(x.png)'}});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			const extras = await detect(el, {elementsFromPoint: [urlLayer]});
+			assert.strictEqual(extras.bgMediaType, 'image');
+			assert.isUndefined(extras.bgMediaReady);
+		});
+
+		it('flags a url() background on an ancestor, passing through a see-through gradient', async function() {
+			const urlAncestor = fakeEl({
+				parentElement: global.window.document.documentElement,
+				style: {backgroundImage: 'url(hero.png)'}
+			});
+			const gradientAncestor = fakeEl({
+				parentElement: urlAncestor,
+				style: {backgroundImage: 'linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent)'}
+			});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: gradientAncestor});
+			const extras = await detect(el);
+			assert.isTrue(extras.bgImageBehind);
+			assert.strictEqual(extras.bgMediaType, 'image');
+		});
+
+		it('stops at an opaque colour ancestor without flagging a background', async function() {
+			const solid = fakeEl({
+				parentElement: global.window.document.documentElement,
+				style: {backgroundColor: 'rgb(5, 5, 5)'}
+			});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: solid});
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgImageBehind);
+			assert.strictEqual(extras.bgDetectVersion, 'geom-1');
+		});
+
+		it('detects a covering <img> below the fold via geometry and reports it loaded', async function() {
+			const img = fakeEl({
+				tagName: 'IMG',
+				complete: true,
+				naturalWidth: 800,
+				rect: {x: 0,
+					y: 0,
+					width: 2000,
+					height: 9000}
+			});
+			const card = fakeEl({parentElement: global.window.document.body,
+				media: [img]});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: card,
+				rect: {x: 100,
+					y: 5000,
+					width: 200,
+					height: 20}});
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgMediaType, 'image');
+			assert.isTrue(extras.bgMediaReady);
+		});
+
+		it('flags an aria-busy region as dynamic content', async function() {
+			const el = fakeEl({
+				tagName: 'H3',
+				parentElement: global.window.document.documentElement,
+				attrs: {'aria-busy': 'true'}
+			});
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'aria-busy');
+		});
+
+		it('flags a lazy-load placeholder covering the text (data-* marker)', async function() {
+			const lazy = fakeEl({
+				rect: {x: 0,
+					y: 0,
+					width: 400,
+					height: 400},
+				attrs: {'data-bg': '/hero.jpg'}
+			});
+			const card = fakeEl({parentElement: global.window.document.documentElement,
+				lazies: [lazy]});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: card});
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'lazy-attr');
+		});
+
+		it('flags an unmarked empty media-slot skeleton (Tier 2) for a bgGradient incomplete', async function() {
+			const slot = fakeEl({
+				rect: {x: 0,
+					y: 0,
+					width: 200,
+					height: 200},
+				style: {position: 'absolute',
+					backgroundColor: 'rgb(230, 230, 230)'}
+			});
+			const tile = fakeEl({
+				parentElement: global.window.document.documentElement,
+				style: {position: 'relative',
+					overflow: 'hidden'},
+				rect: {x: 0,
+					y: 0,
+					width: 200,
+					height: 200},
+				slots: [slot]
+			});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: tile,
+				rect: {x: 40,
+					y: 20,
+					width: 120,
+					height: 15}});
+			const extras = await detect(el, {messageKey: 'bgGradient'});
+			assert.strictEqual(extras.bgDynamicSignal, 'empty-slot');
+		});
+
+		it('captures an empty input placeholder colour as the foreground', async function() {
+			const el = fakeEl({
+				tagName: 'INPUT',
+				value: '',
+				placeholder: 'Search',
+				parentElement: global.window.document.documentElement
+			});
+			el.placeholderStyle = fakeStyle({color: 'rgb(120, 120, 120)',
+				opacity: '0.5'});
+			const extras = await detect(el);
+			assert.strictEqual(extras.placeholderColor, 'rgb(120, 120, 120)');
+			assert.strictEqual(extras.placeholderOpacity, 0.5);
+		});
+
+		it('reports a stacked <canvas> as media treated as ready (no observable load state)', async function() {
+			const canvas = fakeEl({tagName: 'CANVAS'});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			const extras = await detect(el, {elementsFromPoint: [canvas]});
+			assert.strictEqual(extras.bgMediaType, 'canvas');
+			assert.isTrue(extras.bgMediaReady);
+		});
+
+		it('does not flag media when the stacked layer is an opaque colour', async function() {
+			const opaque = fakeEl({style: {backgroundColor: 'rgb(20, 20, 20)'}});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			const extras = await detect(el, {elementsFromPoint: [opaque]});
+			assert.isUndefined(extras.bgMediaType);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('stops the geometry walk at a clip container with no covering media', async function() {
+			const clip = fakeEl({parentElement: global.window.document.body,
+				style: {overflow: 'hidden'}});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: clip,
+				rect: {x: 100,
+					y: 5000,
+					width: 200,
+					height: 20}});
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgMediaType);
+		});
+
+		it('walks the geometry chain to the body without finding covering media', async function() {
+			const mid = fakeEl({parentElement: global.window.document.body});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: mid,
+				rect: {x: 100,
+					y: 5000,
+					width: 200,
+					height: 20}});
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgMediaType);
+		});
+
+		it('does not flag Tier 2 when no clip container is found before the body', async function() {
+			const plain = fakeEl({parentElement: global.window.document.body});
+			const el = fakeEl({tagName: 'H3',
+				parentElement: plain,
+				rect: {x: 40,
+					y: 20,
+					width: 120,
+					height: 15}});
+			const extras = await detect(el, {messageKey: 'bgImage'});
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('captures ::after pseudo styles for a pseudoContent incomplete', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			global.window.getComputedStyle = sinon.stub().callsFake((node, pseudo) => {
+				if (pseudo === '::after') {
+					return fakeStyle({content: '"x"',
+						color: 'rgb(9, 9, 9)'});
+				}
+				if (pseudo === '::before') {
+					return fakeStyle({content: 'none'});
+				}
+				if (pseudo === '::placeholder') {
+					return fakeStyle();
+				}
+				return styleMap.get(node) || fakeStyle();
+			});
+			const extras = await detect(el, {messageKey: 'pseudoContent'});
+			assert.deepEqual(extras.pseudoAfter, {color: 'rgb(9, 9, 9)',
+				content: '"x"'});
+		});
+	});
 });
