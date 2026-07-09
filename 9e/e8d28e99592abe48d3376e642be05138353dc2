@@ -1,0 +1,31 @@
+test/unit/lib/runners/axe.test.js
+  h_ed136440040bc3 689
+  s_fc6428abd3a653::t_d9df542ad0b9bb 690-1053
+lib/runners/axe.js
+  s_fc6428abd3a653::t_3c716f97ccf23b 175-179,239-240,290-291,302,312-313,335-336,379-380,390-391,421-422
+  s_fc6428abd3a653::t_3a272aaa7f8481 162,293-295,320-321,325-326,345-346
+  s_fc6428abd3a653::t_4a2bc9a44d5011 243-286,296-300,317-319,322-324,327-330,338-344,347,350,354-357,375,384-385,387,396-417,431-453,457
+  s_fc6428abd3a653::t_ca6c5d88ef00bf 305,352,383,429-430
+  s_fc6428abd3a653::t_98db0b4abc302e 172-174,241-242,287-289,292,301,303-304,306-311,314-316,331-334,337,348-349,351,353,358-374,376-378,381-382,386,388-389,392-395,418-420,423-428,454-456,458-461,510-514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9ee8d28e99592abe48d3376e642be05138353dc2",
+  "prompts": {},
+  "humans": {
+    "h_ed136440040bc3": {
+      "author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  },
+  "sessions": {
+    "s_fc6428abd3a653": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04a4a7fe-3bf3-4d8e-b20e-3e80969588d5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  }
+}
