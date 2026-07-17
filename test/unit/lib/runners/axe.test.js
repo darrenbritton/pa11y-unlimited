@@ -932,6 +932,98 @@ describe('lib/runners/axe', function() {
 			assert.strictEqual(extras.bgDynamicSignal, 'lazy-attr');
 		});
 
+		it('flags an in-flight opacity transition as dynamic content (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{playState: 'running',
+				transitionProperty: 'opacity'}];
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'opacity-animation');
+		});
+
+		it('flags a transition of "all" that includes opacity (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{playState: 'running',
+				transitionProperty: 'all'}];
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'opacity-animation');
+		});
+
+		it('flags a WAAPI animation whose keyframes tween opacity (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{
+				playState: 'running',
+				effect: {getKeyframes: () => [{opacity: 0},
+					{opacity: 1}]}
+			}];
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'opacity-animation');
+		});
+
+		it('flags a will-change:opacity reveal caught mid-fade with no Animation object (DEV-1200)', async function() {
+			const el = fakeEl({
+				tagName: 'H3',
+				parentElement: global.window.document.documentElement,
+				style: {willChange: 'opacity',
+					opacity: '0.2'}
+			});
+			const extras = await detect(el);
+			assert.strictEqual(extras.bgDynamicSignal, 'opacity-animation');
+			assert.strictEqual(extras.opacity, 0.2);
+		});
+
+		it('does not flag a transition that leaves opacity alone (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{playState: 'running',
+				transitionProperty: 'transform'}];
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('does not flag a WAAPI animation that never touches opacity (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{
+				playState: 'running',
+				effect: {getKeyframes: () => [{transform: 'translateY(0)'}]}
+			}];
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('does not flag a finished (idle) opacity animation (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => [{playState: 'idle',
+				transitionProperty: 'opacity'}];
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('does not flag will-change:opacity once the value has settled (DEV-1200)', async function() {
+			const el = fakeEl({
+				tagName: 'H3',
+				parentElement: global.window.document.documentElement,
+				style: {willChange: 'opacity',
+					opacity: '1'}
+			});
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
+		it('tolerates getAnimations throwing, falling back to no signal (DEV-1200)', async function() {
+			const el = fakeEl({tagName: 'H3',
+				parentElement: global.window.document.documentElement});
+			el.getAnimations = () => {
+				throw new Error('detached');
+			};
+			const extras = await detect(el);
+			assert.isUndefined(extras.bgDynamicSignal);
+		});
+
 		it('flags an unmarked empty media-slot skeleton (Tier 2) for a bgGradient incomplete', async function() {
 			const slot = fakeEl({
 				rect: {x: 0,
