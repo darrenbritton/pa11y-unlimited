@@ -1,0 +1,27 @@
+package.json
+  s_114eff2696fd26::t_63f2a3ead1fb92 3
+CHANGELOG.md
+  s_114eff2696fd26::t_4a8dcafa21df21 3-10
+lib/runners/axe.js
+  s_114eff2696fd26::t_65f417c479e193 216-238,246-254
+  s_114eff2696fd26::t_ce239e768ef181 184
+  s_114eff2696fd26::t_ce395c99ab5036 255,495-500
+test/unit/lib/runners/axe.test.js
+  s_114eff2696fd26::t_de02b776d8c793 935-1026
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "e43b5e8c84017caf4cc6c2ef949f98063199d438",
+  "prompts": {},
+  "sessions": {
+    "s_114eff2696fd26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1cc66ad-1ee2-46b6-af19-7465e7c420b8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rebecca Dillon <rebecca.dillon@devally.eu>"
+    }
+  }
+}
