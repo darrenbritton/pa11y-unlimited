@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.8.0 (2026-07-16)
+
+* Detect an in-flight `opacity` animation or transition on the text or any ancestor of a colour-contrast incomplete — a running WAAPI/CSS opacity animation, a `transition` of `opacity`/`all`, or a `will-change: opacity` reveal caught below its settled value — and emit `bgDynamicSignal: 'opacity-animation'`. Reading `opacity` live during the axe run while the screenshot is captured on a different frame otherwise yields a transient mid-fade value; the signal lets the post-audit colour-contrast resolver abstain instead of scoring a wrong `fail` on scroll-reveal text. (DEV-1200)
+
+### Full diff for `pa11y-unlimited@9.8.0`
+
+* [v9.7.0...v9.8.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.7.0...v9.8.0)
+
 ## 9.6.1 (2026-06-30)
 
 * Capture the `::placeholder` colour (and its own opacity) for an empty `<input>`/`<textarea>` — where the placeholder is the only visible text and the element's `color` styles the never-painted typed value — so the post-audit colour-contrast resolver measures the visible placeholder instead of false-passing on the unpainted `color`. (DEV-917)
