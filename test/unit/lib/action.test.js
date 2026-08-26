@@ -255,22 +255,111 @@ describe('lib/action', function() {
 				resolvedValue = await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
 			});
 
-			it('clicks the specified element on the page', function() {
-				assert.calledOnce(puppeteer.mockPage.click);
-				assert.calledWithExactly(puppeteer.mockPage.click, matches[2]);
+			it('resolves a handle for the element and clicks it', function() {
+				assert.calledOnce(puppeteer.mockPage.$);
+				assert.calledWithExactly(puppeteer.mockPage.$, matches[2]);
+				assert.notCalled(puppeteer.mockPage.click);
+				assert.calledOnce(puppeteer.mockElementHandle.click);
+				assert.calledOnce(puppeteer.mockElementHandle.dispose);
+			});
+
+			it('checks for an obstruction at the click point before clicking', function() {
+				assert.calledOnce(puppeteer.mockElementHandle.evaluate);
+				assert.isFunction(puppeteer.mockElementHandle.evaluate.firstCall.args[0]);
 			});
 
 			it('resolves with `undefined`', function() {
 				assert.isUndefined(resolvedValue);
 			});
 
-			describe('when the click fails', function() {
-				let clickError;
+			describe('the page-side obstruction check', function() {
+				let checkObstruction;
+				let mockElement;
+				let mockRect;
+				let originalDocument;
+				let originalWindow;
+
+				beforeEach(function() {
+					checkObstruction = puppeteer.mockElementHandle.evaluate.firstCall.args[0];
+					mockRect = {left: 100,
+						top: 100,
+						width: 50,
+						height: 20};
+					mockElement = {
+						getBoundingClientRect: sinon.stub().returns(mockRect),
+						contains: sinon.stub().returns(false),
+						labels: []
+					};
+					originalDocument = global.document;
+					originalWindow = global.window;
+					global.window = {innerWidth: 1280,
+						innerHeight: 800};
+					global.document = {
+						elementFromPoint: sinon.stub().returns(mockElement)
+					};
+				});
+
+				afterEach(function() {
+					global.document = originalDocument;
+					global.window = originalWindow;
+				});
+
+				it('returns null when the element receives its own click point', function() {
+					assert.isNull(checkObstruction(mockElement));
+					assert.calledWithExactly(global.document.elementFromPoint, 125, 110);
+				});
+
+				it('returns null when the element has no box', function() {
+					mockRect.width = 0;
+					mockRect.height = 0;
+					assert.isNull(checkObstruction(mockElement));
+					assert.notCalled(global.document.elementFromPoint);
+				});
+
+				it('returns null when the click point is outside the viewport', function() {
+					mockRect.left = 1400;
+					assert.isNull(checkObstruction(mockElement));
+					assert.notCalled(global.document.elementFromPoint);
+				});
+
+				it('returns null when the hit element is a descendant of the target', function() {
+					const child = {contains: sinon.stub().returns(false)};
+					mockElement.contains.returns(true);
+					global.document.elementFromPoint.returns(child);
+					assert.isNull(checkObstruction(mockElement));
+				});
+
+				it('returns null when a label for the target covers it', function() {
+					const label = {
+						tagName: 'LABEL',
+						contains: sinon.stub().returns(false),
+						closest: sinon.stub()
+					};
+					label.closest.withArgs('label').returns(label);
+					mockElement.labels = [label];
+					global.document.elementFromPoint.returns(label);
+					assert.isNull(checkObstruction(mockElement));
+				});
+
+				it('describes an unrelated covering element', function() {
+					const overlay = {
+						tagName: 'DIV',
+						id: 'cookie-banner',
+						className: 'cky-consent cky-box extra ignored',
+						contains: sinon.stub().returns(false),
+						closest: sinon.stub().returns(null)
+					};
+					global.document.elementFromPoint.returns(overlay);
+					assert.strictEqual(checkObstruction(mockElement), '<div#cookie-banner.cky-consent.cky-box>');
+				});
+
+			});
+
+			describe('when no element matches the selector', function() {
 				let rejectedError;
 
 				beforeEach(async function() {
-					clickError = new Error('click error');
-					puppeteer.mockPage.click.rejects(clickError);
+					puppeteer.mockPage.$.resolves(null);
 					try {
 						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
 					} catch (error) {
@@ -278,10 +367,53 @@ describe('lib/action', function() {
 					}
 				});
 
-				it('rejects with a new error', function() {
-					assert.notStrictEqual(rejectedError, clickError);
+				it('rejects with the standard no-element error', function() {
 					assert.instanceOf(rejectedError, Error);
 					assert.strictEqual(rejectedError.message, 'Failed action: no element matching selector "foo"');
+				});
+
+			});
+
+			describe('when the click point is covered by another element', function() {
+				let rejectedError;
+
+				beforeEach(async function() {
+					puppeteer.mockElementHandle.evaluate.resolves('<div#overlay.cky-consent>');
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('rejects with a covered-element error and does not click', function() {
+					assert.instanceOf(rejectedError, Error);
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" is covered by another element: <div#overlay.cky-consent>');
+					assert.calledOnce(puppeteer.mockElementHandle.click);
+					assert.calledTwice(puppeteer.mockElementHandle.dispose);
+				});
+
+			});
+
+			describe('when the click fails', function() {
+				let clickError;
+				let rejectedError;
+
+				beforeEach(async function() {
+					clickError = new Error('Node is either not clickable or not an Element');
+					puppeteer.mockElementHandle.click.rejects(clickError);
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('rejects with an error naming the element as found and carrying the real reason', function() {
+					assert.notStrictEqual(rejectedError, clickError);
+					assert.instanceOf(rejectedError, Error);
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but could not be clicked: Node is either not clickable or not an Element');
+					assert.calledTwice(puppeteer.mockElementHandle.dispose);
 				});
 
 			});
@@ -470,7 +602,7 @@ describe('lib/action', function() {
 				it('rejects with a new error', function() {
 					assert.notStrictEqual(rejectedError, evaluateError);
 					assert.instanceOf(rejectedError, Error);
-					assert.strictEqual(rejectedError.message, 'Failed action: no element matching selector "foo"');
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but its value could not be set: evaluate error');
 				});
 
 			});
@@ -802,7 +934,7 @@ describe('lib/action', function() {
 				it('rejects with a new error', function() {
 					assert.notStrictEqual(rejectedError, evaluateError);
 					assert.instanceOf(rejectedError, Error);
-					assert.strictEqual(rejectedError.message, 'Failed action: no element matching selector "foo"');
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but its value could not be cleared: evaluate error');
 				});
 
 			});
@@ -997,7 +1129,7 @@ describe('lib/action', function() {
 				it('rejects with a new error', function() {
 					assert.notStrictEqual(rejectedError, evaluateError);
 					assert.instanceOf(rejectedError, Error);
-					assert.strictEqual(rejectedError.message, 'Failed action: no element matching selector "foo"');
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but it could not be checked: evaluate error');
 				});
 
 			});
@@ -2056,9 +2188,9 @@ describe('lib/action', function() {
 					}
 				});
 
-				it('rejects with the standard no-element error and still disposes the handle', function() {
+				it('rejects with a found-but-failed error and still disposes the handle', function() {
 					assert.instanceOf(rejectedError, Error);
-					assert.strictEqual(rejectedError.message, `Failed action: no element matching selector "${selector}"`);
+					assert.strictEqual(rejectedError.message, `Failed action: element matching selector "${selector}" was found but its value could not be set: evaluate error`);
 					assert.called(puppeteer.mockElementHandle.dispose);
 				});
 			});
@@ -2335,9 +2467,9 @@ describe('lib/action', function() {
 					}
 				});
 
-				it('rejects with the standard no-element error and still disposes the handle', function() {
+				it('rejects with a found-but-unclickable error and still disposes the handle', function() {
 					assert.instanceOf(rejectedError, Error);
-					assert.strictEqual(rejectedError.message, `Failed action: no element matching selector "${selector}"`);
+					assert.strictEqual(rejectedError.message, `Failed action: element matching selector "${selector}" was found but could not be clicked: click error`);
 					assert.called(puppeteer.mockElementHandle.dispose);
 				});
 			});
