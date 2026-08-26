@@ -30,6 +30,10 @@ describe('lib/action', function() {
 		assert.isArray(runAction.actions);
 	});
 
+	it('declares the truthful-action-failures capability flag', function() {
+		assert.isTrue(runAction.surfacesActionFailures);
+	});
+
 	it('has an `isValidAction` method', function() {
 		assert.isFunction(runAction.isValidAction);
 	});
