@@ -385,6 +385,30 @@ describe('lib/action', function() {
 					assert.strictEqual(checkObstruction(mockElement), '<div#consent>');
 				});
 
+				it('returns null when the target is itself a shadow host and the hit lands on its own shadow child', function() {
+					const shadowRoot = {host: mockElement, parentNode: null};
+					const shadowChild = {
+						tagName: 'SPAN',
+						contains: sinon.stub().returns(false),
+						parentNode: shadowRoot
+					};
+					mockElement.shadowRoot = {elementFromPoint: sinon.stub().returns(shadowChild)};
+					mockElement.contains.returns(false);
+					global.document.elementFromPoint.returns(mockElement);
+					assert.isNull(checkObstruction(mockElement));
+				});
+
+				it('returns null when the hit is an ancestor of the target across a shadow boundary', function() {
+					const host = {
+						tagName: 'X-HOST',
+						contains: sinon.stub().returns(false),
+						shadowRoot: {elementFromPoint: sinon.stub().returns(null)}
+					};
+					mockElement.parentNode = {host, parentNode: null};
+					global.document.elementFromPoint.returns(host);
+					assert.isNull(checkObstruction(mockElement));
+				});
+
 				it('stops descending when a shadow root hit-tests to its own host', function() {
 					const host = {
 						tagName: 'X-HOST',
