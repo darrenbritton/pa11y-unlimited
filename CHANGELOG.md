@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.9.0 (2026-08-27)
+
+* Surface real click and field-action failures instead of masking every one as "no element matching selector": `click`, `set field`, `clear field` and `check field` now resolve the element first, refuse a click whose hit-test lands on an unrelated covering element (`is covered by another element: <…>`, shadow trees and labels exempt), and report a found-but-failed action as `was found but could not be clicked` / `its value could not be set` with the underlying reason. The `surfacesActionFailures` capability flag is exported so consumers can gate their failure taxonomy on it. (DEV-1347, #16)
+
+### Full diff for `pa11y-unlimited@9.9.0`
+
+* [v9.8.0...v9.9.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.8.0...v9.9.0)
+
 ## 9.8.0 (2026-07-16)
 
 * Detect an in-flight `opacity` animation or transition on the text or any ancestor of a colour-contrast incomplete — a running WAAPI/CSS opacity animation, a `transition` of `opacity`/`all`, or a `will-change: opacity` reveal caught below its settled value — and emit `bgDynamicSignal: 'opacity-animation'`. Reading `opacity` live during the axe run while the screenshot is captured on a different frame otherwise yields a transient mid-fade value; the signal lets the post-audit colour-contrast resolver abstain instead of scoring a wrong `fail` on scroll-reveal text. (DEV-1200)
