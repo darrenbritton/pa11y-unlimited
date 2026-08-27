@@ -357,6 +357,47 @@ describe('lib/action', function() {
 					assert.strictEqual(checkObstruction(mockElement), '<div#cookie-banner.cky-consent.cky-box>');
 				});
 
+				it('descends through shadow hosts so a target inside a shadow tree is not reported as covered by its own host', function() {
+					const host = {
+						tagName: 'MY-WIDGET',
+						contains: sinon.stub().returns(false),
+						shadowRoot: {elementFromPoint: sinon.stub().returns(mockElement)}
+					};
+					global.document.elementFromPoint.returns(host);
+					assert.isNull(checkObstruction(mockElement));
+					assert.calledWithExactly(host.shadowRoot.elementFromPoint, 125, 110);
+				});
+
+				it('describes an overlay found inside a shadow host', function() {
+					const overlay = {
+						tagName: 'DIV',
+						id: 'consent',
+						className: '',
+						contains: sinon.stub().returns(false),
+						closest: sinon.stub().returns(null)
+					};
+					const host = {
+						tagName: 'COOKIE-BANNER',
+						contains: sinon.stub().returns(false),
+						shadowRoot: {elementFromPoint: sinon.stub().returns(overlay)}
+					};
+					global.document.elementFromPoint.returns(host);
+					assert.strictEqual(checkObstruction(mockElement), '<div#consent>');
+				});
+
+				it('stops descending when a shadow root hit-tests to its own host', function() {
+					const host = {
+						tagName: 'X-HOST',
+						id: 'host',
+						className: '',
+						contains: sinon.stub().returns(false),
+						closest: sinon.stub().returns(null)
+					};
+					host.shadowRoot = {elementFromPoint: sinon.stub().returns(host)};
+					global.document.elementFromPoint.returns(host);
+					assert.strictEqual(checkObstruction(mockElement), '<x-host#host>');
+				});
+
 			});
 
 			describe('when no element matches the selector', function() {
@@ -382,6 +423,8 @@ describe('lib/action', function() {
 				let rejectedError;
 
 				beforeEach(async function() {
+					puppeteer.mockElementHandle.click.resetHistory();
+					puppeteer.mockElementHandle.dispose.resetHistory();
 					puppeteer.mockElementHandle.evaluate.resolves('<div#overlay.cky-consent>');
 					try {
 						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
@@ -393,8 +436,8 @@ describe('lib/action', function() {
 				it('rejects with a covered-element error and does not click', function() {
 					assert.instanceOf(rejectedError, Error);
 					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" is covered by another element: <div#overlay.cky-consent>');
-					assert.calledOnce(puppeteer.mockElementHandle.click);
-					assert.calledTwice(puppeteer.mockElementHandle.dispose);
+					assert.notCalled(puppeteer.mockElementHandle.click);
+					assert.calledOnce(puppeteer.mockElementHandle.dispose);
 				});
 
 			});
@@ -571,14 +614,15 @@ describe('lib/action', function() {
 					beforeEach(async function() {
 						global.document.querySelector.returns(null);
 						try {
-							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-value');
+							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-value', 'mock-sentinel');
 						} catch (error) {
 							rejectedError = error;
 						}
 					});
 
-					it('rejects with an error', function() {
+					it('rejects with the passed-in no-element sentinel', function() {
 						assert.instanceOf(rejectedError, Error);
+						assert.strictEqual(rejectedError.message, 'mock-sentinel');
 					});
 
 				});
@@ -607,6 +651,46 @@ describe('lib/action', function() {
 					assert.notStrictEqual(rejectedError, evaluateError);
 					assert.instanceOf(rejectedError, Error);
 					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but its value could not be set: evaluate error');
+				});
+
+			});
+
+			describe('when the page-side setter itself throws a message that merely mentions no element being found', function() {
+				let rejectedError;
+
+				beforeEach(async function() {
+					puppeteer.mockPage.evaluate.rejects(new Error('Widget: No element found for the bound model'));
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('keeps the real failure rather than reporting a missing element', function() {
+					assert.strictEqual(rejectedError.message, 'Failed action: element matching selector "foo" was found but its value could not be set: Widget: No element found for the bound model');
+				});
+
+			});
+
+			describe('when the page-side function rejects with the no-element sentinel', function() {
+				let rejectedError;
+
+				beforeEach(async function() {
+					puppeteer.mockPage.evaluate.rejects(new Error('pa11y-unlimited:no-element'));
+					try {
+						await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
+					} catch (error) {
+						rejectedError = error;
+					}
+				});
+
+				it('reports the standard no-element error', function() {
+					assert.strictEqual(rejectedError.message, 'Failed action: no element matching selector "foo"');
+				});
+
+				it('passes that sentinel into the page-side function', function() {
+					assert.strictEqual(puppeteer.mockPage.evaluate.firstCall.args[3], 'pa11y-unlimited:no-element');
 				});
 
 			});
@@ -903,14 +987,15 @@ describe('lib/action', function() {
 					beforeEach(async function() {
 						global.document.querySelector.returns(null);
 						try {
-							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-value');
+							await puppeteer.mockPage.evaluate.firstCall.args[0]('mock-selector', 'mock-sentinel');
 						} catch (error) {
 							rejectedError = error;
 						}
 					});
 
-					it('rejects with an error', function() {
+					it('rejects with the passed-in no-element sentinel', function() {
 						assert.instanceOf(rejectedError, Error);
+						assert.strictEqual(rejectedError.message, 'mock-sentinel');
 					});
 
 				});
