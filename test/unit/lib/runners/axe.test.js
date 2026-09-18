@@ -592,6 +592,45 @@ describe('lib/runners/axe', function() {
 			assert.isUndefined(extras.cssFg);
 			assert.isUndefined(extras.bbox);
 			assert.isUndefined(extras.axeData);
+			assert.isUndefined(extras.failureSummary);
+		});
+
+		it('keeps the failure summary and the matching check data on a violation', async function() {
+			const data = {contrastRatio: 2.1,
+				expectedContrastRatio: '4.5:1',
+				fgColor: '#bbbbbb',
+				bgColor: '#ffffff'};
+			global.window.axe.run = sinon.stub().resolves({
+				violations: [
+					{
+						id: 'color-contrast',
+						description: 'd',
+						impact: 'serious',
+						help: 'h',
+						helpUrl: 'u',
+						nodes: [
+							{
+								target: ['mock-selector'],
+								failureSummary: 'Fix any of the following:\n  Element has insufficient color contrast of 2.1. Expected contrast ratio of 4.5:1',
+								any: [{id: 'color-contrast',
+									data,
+									message: 'Element has insufficient color contrast of 2.1. Expected contrast ratio of 4.5:1'}],
+								all: [],
+								none: []
+							}
+						]
+					}
+				],
+				incomplete: []
+			});
+			const extras = (await runner.run({}, {}))[0].runnerExtras;
+			assert.strictEqual(
+				extras.failureSummary,
+				'Fix any of the following:\n  Element has insufficient color contrast of 2.1. Expected contrast ratio of 4.5:1'
+			);
+			assert.deepEqual(extras.axeData, data);
+			assert.isUndefined(extras.cssFg);
+			assert.isUndefined(extras.bbox);
 		});
 
 		it('extracts axeData and trimmed axeRelatedNodes from the matching check', async function() {
