@@ -1,16 +1,57 @@
+# Dependency updates. Third-party releases must have been public for 14 days
+# before Dependabot proposes them, so we sit out malicious publishes that are
+# usually caught and pulled within days. Security updates are never delayed.
 version: 2
+
 updates:
-  - package-ecosystem: 'npm'
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    # Production dependencies only (kept from upstream pa11y). This also
+    # filters security updates for devDependencies.
     allow:
-      - dependency-type: 'production'
-    directory: '/'
-    schedule:
-      interval: 'weekly'
+      - dependency-type: production
     labels:
-      - 'dependencies'
-  - package-ecosystem: 'github-actions'
-    directory: '/'
+      - dependencies
+    cooldown:
+      default-days: 14
+      # First-party packages are exempt. Don't add `min-release-age` to the
+      # repo .npmrc: Dependabot treats it as a floor and drops this list.
+      exclude:
+        - "@devally/*"
+        - pa11y-unlimited
+    groups:
+      # Keep first-party bumps in their own PR: Dependabot skips its release-age
+      # check on new transitive dependencies for any PR with an exempt package.
+      first-party:
+        patterns:
+          - "@devally/*"
+          - pa11y-unlimited
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # axe-core is the scan engine and must match across devally-platform-backend,
+      # pa11y-unlimited and the generated rule mappings. Upgrade it deliberately.
+      - dependency-name: axe-core
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: 'daily'
+      interval: weekly
     labels:
-      - 'dependencies'
+      - dependencies
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns:
+          - "*"
