@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.9.1 (2026-10-08)
+
+* No code changes. Released to test the reworked publish workflow: it builds and packs without a publish credential, then publishes that tarball from the `production` environment, which needs a maintainer's approval and is the only route npm's trusted publisher accepts.
+
+### Full diff for `pa11y-unlimited@9.9.1`
+
+* [v9.9.0...v9.9.1](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.9.0...v9.9.1)
+
 ## 9.9.0 (2026-08-27)
 
 * Surface real click and field-action failures instead of masking every one as "no element matching selector": `click`, `set field`, `clear field` and `check field` now resolve the element first, refuse a click whose hit-test lands on an unrelated covering element (`is covered by another element: <…>`, shadow trees and labels exempt), and report a found-but-failed action as `was found but could not be clicked` / `its value could not be set` with the underlying reason. The `surfacesActionFailures` capability flag is exported so consumers can gate their failure taxonomy on it. (DEV-1347, #16)
