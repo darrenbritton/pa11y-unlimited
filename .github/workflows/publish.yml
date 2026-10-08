@@ -85,5 +85,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # No checkout and no install. Publishing a tarball also skips the package's lifecycle scripts.
+      # Keep the ./ — without it npm reads `package/x.tgz` as the GitHub repository package/x.tgz and
+      # tries to fetch and publish that instead of the local file.
       - name: Publish to npm
-        run: npm publish package/*.tgz --provenance --access public
+        run: npm publish ./package/*.tgz --provenance --access public
