@@ -22,13 +22,9 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm ci
-
-      # NPM 11.5.1+ (released with Node 24.5.0) is required for OIDC trusted publishing
-      - name: Update npm
-        run: npm install -g npm@11.5.1
 
       - name: Publish package
         if: >
