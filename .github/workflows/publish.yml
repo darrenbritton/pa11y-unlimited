@@ -80,11 +80,26 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          # Exact version for its bundled npm, 11.19.0. Trusted publishing needs 11.5.1 or later.
+          # Exact version for its bundled npm, 11.19.0. Trusted publishing needs 11.5.1 or later,
+          # and `npm stage` 11.15.0.
           node-version: '24.21.0'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       # No checkout and no install. Publishing a tarball also skips the package's lifecycle scripts.
-      - name: Publish to npm
-        run: npm publish package/*.tgz --provenance --access public
+      #
+      # Staged, not published: the version waits on npm until a maintainer approves it with 2FA, so
+      # a run nobody expected — a stolen GitHub account, a bad merge — cannot reach consumers on its
+      # own. With the trusted publisher set to stage-only, `npm publish` from here is refused.
+      - name: Stage on npm for approval
+        run: npm stage publish package/*.tgz --provenance --access public
+
+      - name: Say where to approve it
+        run: |
+          {
+            echo "### Staged on npm, not yet published"
+            echo
+            echo "A maintainer must approve it with 2FA: npmjs.com → the package → **Staged Packages** → Approve,"
+            echo "or \`npm stage list pa11y-unlimited\` then \`npm stage approve <stage-id>\`."
+            echo "Reject it instead if nobody meant to release $GITHUB_REF_NAME."
+          } >> "$GITHUB_STEP_SUMMARY"
