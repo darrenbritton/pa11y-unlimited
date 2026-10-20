@@ -2921,6 +2921,15 @@ describe('lib/action', function() {
 				assert.strictEqual(context, child);
 			});
 
+			it('keeps frame order in the fallback, so the main frame wins when every match is hidden', async function() {
+				const child = mockContext({evaluate: xpathFrameState({present: true,
+					visible: false})});
+				const page = mockFramedPage({evaluate: xpathFrameState({present: true,
+					visible: false})}, [child]);
+				const context = await runAction.resolveActionContext(page, '//button');
+				assert.strictEqual(context, page);
+			});
+
 			it('treats a throwing XPath evaluate as a miss', async function() {
 				const child = mockContext({evaluate: xpathFrameState({present: true,
 					visible: true})});
