@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.9.2 (2026-10-21)
+
+* Prefer a visible match for bare XPath selectors: waits, frame selection, clicks and fills now consider every match instead of the first, so a hidden duplicate earlier in the page (`display: none`, `visibility: hidden`, or inside an `aria-hidden="true"` subtree) no longer claims the action and fails with "Node is either not clickable or not an Element". A wait for `hidden` now needs every match hidden. CSS selectors are unchanged. (#27)
+
+### Full diff for `pa11y-unlimited@9.9.2`
+
+* [v9.9.1...v9.9.2](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.9.1...v9.9.2)
+
 ## 9.9.1 (2026-10-08)
 
 * No code changes. Released to test the reworked publish workflow: it builds and packs without a publish credential, then publishes that tarball from the `production` environment, which needs a maintainer's approval and is the only route npm's trusted publisher accepts.
