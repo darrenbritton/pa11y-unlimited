@@ -2503,6 +2503,50 @@ describe('lib/action', function() {
 
 	describe('bare XPath (document.evaluate) selector support', function() {
 
+		function pageNode({boxes = true, visibility = 'visible', ariaHidden = false} = {}) {
+			return {
+				offsetWidth: boxes ? 10 : 0,
+				offsetHeight: boxes ? 10 : 0,
+				getClientRects: () => (boxes ? [{}] : []),
+				computedVisibility: visibility,
+				closest: selector => ((ariaHidden && selector === '[aria-hidden="true"]') ? {} : null)
+			};
+		}
+
+		const visibleNode = pageNode();
+		const hiddenNode = pageNode({boxes: false});
+		const visibilityHiddenNode = pageNode({visibility: 'hidden'});
+		const ariaHiddenNode = pageNode({ariaHidden: true});
+
+		function stubMatches(nodes) {
+			global.document = {
+				evaluate: sinon.stub().returns({
+					snapshotLength: nodes.length,
+					snapshotItem: index => nodes[index]
+				})
+			};
+		}
+
+		function usePageGlobals() {
+			let originalDocument;
+			let originalXPathResult;
+			let originalWindow;
+
+			beforeEach(function() {
+				originalDocument = global.document;
+				originalXPathResult = global.XPathResult;
+				originalWindow = global.window;
+				global.XPathResult = {ORDERED_NODE_SNAPSHOT_TYPE: 7};
+				global.window = {getComputedStyle: node => ({visibility: node.computedVisibility})};
+			});
+
+			afterEach(function() {
+				global.document = originalDocument;
+				global.XPathResult = originalXPathResult;
+				global.window = originalWindow;
+			});
+		}
+
 		describe('click-element with a bare XPath', function() {
 			let action;
 			let matches;
@@ -2524,35 +2568,12 @@ describe('lib/action', function() {
 			});
 
 			describe('the page-side resolver function', function() {
-				let originalDocument;
-				let originalXPathResult;
 				let resolver;
-				const visibleNode = {offsetWidth: 71,
-					offsetHeight: 30,
-					getClientRects: () => [{}]};
-				const hiddenNode = {offsetWidth: 0,
-					offsetHeight: 0,
-					getClientRects: () => []};
 
-				function stubMatches(nodes) {
-					global.document = {
-						evaluate: sinon.stub().returns({
-							snapshotLength: nodes.length,
-							snapshotItem: index => nodes[index]
-						})
-					};
-				}
+				usePageGlobals();
 
 				beforeEach(function() {
-					originalDocument = global.document;
-					originalXPathResult = global.XPathResult;
-					global.XPathResult = {ORDERED_NODE_SNAPSHOT_TYPE: 7};
 					resolver = puppeteer.mockPage.evaluateHandle.firstCall.args[0];
-				});
-
-				afterEach(function() {
-					global.document = originalDocument;
-					global.XPathResult = originalXPathResult;
 				});
 
 				it('evaluates the xpath as an ordered snapshot', function() {
@@ -2563,6 +2584,16 @@ describe('lib/action', function() {
 
 				it('prefers a visible match over a hidden one earlier in the document', function() {
 					stubMatches([hiddenNode, hiddenNode, visibleNode]);
+					assert.strictEqual(resolver('//button'), visibleNode);
+				});
+
+				it('skips a duplicate hidden with visibility: hidden despite its layout boxes', function() {
+					stubMatches([visibilityHiddenNode, visibleNode]);
+					assert.strictEqual(resolver('//button'), visibleNode);
+				});
+
+				it('skips a duplicate inside an aria-hidden subtree despite its layout boxes', function() {
+					stubMatches([ariaHiddenNode, visibleNode]);
 					assert.strictEqual(resolver('//button'), visibleNode);
 				});
 
@@ -2659,37 +2690,14 @@ describe('lib/action', function() {
 			});
 
 			describe('the page-side predicate', function() {
-				let originalDocument;
-				let originalXPathResult;
 				let predicate;
-				const visibleNode = {offsetWidth: 10,
-					offsetHeight: 10,
-					getClientRects: () => [{}]};
-				const hiddenNode = {offsetWidth: 0,
-					offsetHeight: 0,
-					getClientRects: () => []};
 
-				function stubMatches(nodes) {
-					global.document = {
-						evaluate: sinon.stub().returns({
-							snapshotLength: nodes.length,
-							snapshotItem: index => nodes[index]
-						})
-					};
-				}
+				usePageGlobals();
 
 				beforeEach(async function() {
-					originalDocument = global.document;
-					originalXPathResult = global.XPathResult;
-					global.XPathResult = {ORDERED_NODE_SNAPSHOT_TYPE: 7};
 					const matches = `wait for element ${selector} to be visible`.match(action.match);
 					await action.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, matches);
 					predicate = puppeteer.mockPage.waitForFunction.firstCall.args[0];
-				});
-
-				afterEach(function() {
-					global.document = originalDocument;
-					global.XPathResult = originalXPathResult;
 				});
 
 				it('is true for "visible" when the element has layout boxes', function() {
@@ -2713,6 +2721,21 @@ describe('lib/action', function() {
 					assert.isTrue(predicate(selector, 'hidden'));
 				});
 
+				it('treats matches hidden with visibility: hidden or aria-hidden as hidden', function() {
+					stubMatches([visibilityHiddenNode, ariaHiddenNode]);
+					assert.isFalse(predicate(selector, 'visible'));
+					assert.isTrue(predicate(selector, 'hidden'));
+				});
+
+				it('settles "added" and "removed" from the match count without checking visibility', function() {
+					const unreadable = {get offsetWidth() {
+						throw new Error('visibility was read');
+					}};
+					stubMatches([unreadable]);
+					assert.isTrue(predicate(selector, 'added'));
+					assert.isFalse(predicate(selector, 'removed'));
+				});
+
 				it('treats a match without layout APIs (e.g. a text node) as hidden', function() {
 					stubMatches([{}]);
 					assert.isFalse(predicate(selector, 'visible'));
@@ -2732,6 +2755,33 @@ describe('lib/action', function() {
 					stubMatches([visibleNode]);
 					assert.isFalse(predicate(selector, 'focused'));
 				});
+			});
+		});
+
+		describe('the page-side visibility check', function() {
+			const selector = '//button[normalize-space(.)="Change"]';
+			let resolver;
+			let predicate;
+
+			usePageGlobals();
+
+			beforeEach(async function() {
+				const click = runAction.actions.find(foundAction => foundAction.name === 'click-element');
+				const wait = runAction.actions.find(foundAction => foundAction.name === 'wait-for-element-state');
+				await click.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, `click element ${selector}`.match(click.match));
+				await wait.run(puppeteer.mockBrowser, puppeteer.mockPage, {}, `wait for element ${selector} to be visible`.match(wait.match));
+				resolver = puppeteer.mockPage.evaluateHandle.firstCall.args[0];
+				predicate = puppeteer.mockPage.waitForFunction.firstCall.args[0];
+			});
+
+			it('agrees between the resolver and the wait predicate for every kind of node', function() {
+				const nodes = [visibleNode, hiddenNode, visibilityHiddenNode, ariaHiddenNode, {}];
+				for (const node of nodes) {
+					stubMatches([node, pageNode()]);
+					const resolverSeesVisible = resolver(selector) === node;
+					stubMatches([node]);
+					assert.strictEqual(predicate(selector, 'visible'), resolverSeesVisible);
+				}
 			});
 		});
 
