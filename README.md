@@ -443,7 +443,7 @@ Defaults to `false`.
 
 ### `includePasses` (boolean)
 
-Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in, and with it unset or `false` the results are unchanged.
+Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in: with it unset or `false`, no passes are reported, and the other results are unchanged (`runnerVersions` is always present).
 
 ```js
 pa11y(url, {
