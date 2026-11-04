@@ -120,6 +120,32 @@ describe('lib/runner', function() {
 
 			});
 
+			it('resolves with an empty `runnerVersions` object when no runner reports a version', function() {
+				assert.deepEqual(resolvedValue.runnerVersions, {});
+			});
+
+			describe('when a runner reports its engine version', function() {
+
+				beforeEach(async function() {
+					pa11y.runners['mock-runner'].callsFake((runOptions, runnerPa11y) => {
+						runnerPa11y.runnerVersions['mock-runner'] = '9.8.7';
+						return Promise.resolve([]);
+					});
+					resolvedValue = await pa11y.run(options);
+				});
+
+				it('resolves with that version under the runner\'s name', function() {
+					assert.deepEqual(resolvedValue.runnerVersions, {'mock-runner': '9.8.7'});
+				});
+
+				it('reports nothing from it on a later run in which no runner reports a version', async function() {
+					pa11y.runners['mock-runner'] = sinon.stub().resolves([]);
+					resolvedValue = await pa11y.run(options);
+					assert.deepEqual(resolvedValue.runnerVersions, {});
+				});
+
+			});
+
 			describe('when an issue type is not found', function() {
 
 				beforeEach(async function() {
@@ -136,6 +162,106 @@ describe('lib/runner', function() {
 
 				it('resolves with a `typeCode` of 0', function() {
 					assert.strictEqual(resolvedValue.issues[0].typeCode, 0);
+				});
+
+			});
+
+			describe('when a runner resolves with passes and `options.includePasses` is `true`', function() {
+				let sharedElement;
+
+				beforeEach(async function() {
+					sharedElement = createMockElement({
+						id: 'shared-element',
+						outerHTML: '<img id="shared-element">'
+					});
+					pa11y.runners['mock-runner'].returns([
+						{
+							code: 'mock-failing-rule',
+							element: sharedElement,
+							message: 'mock violation',
+							type: 'error'
+						},
+						{
+							code: 'mock-passing-rule',
+							element: sharedElement,
+							message: 'mock pass',
+							type: 'pass',
+							runnerExtras: {isPass: true}
+						}
+					]);
+					options.includePasses = true;
+					options.ignore = ['notice', 'warning'];
+					resolvedValue = await pa11y.run(options);
+				});
+
+				it('resolves with the pass typed `pass` with a `typeCode` of 4', function() {
+					assert.deepEqual(resolvedValue.issues[1], {
+						code: 'mock-passing-rule',
+						context: '<img id="shared-element">',
+						message: 'mock pass',
+						selector: '#shared-element',
+						runner: 'mock-runner',
+						runnerExtras: {isPass: true},
+						type: 'pass',
+						typeCode: 4
+					});
+				});
+
+				it('derives the pass selector and context with the same helpers as the violation', function() {
+					assert.strictEqual(resolvedValue.issues[1].selector, resolvedValue.issues[0].selector);
+					assert.strictEqual(resolvedValue.issues[1].context, resolvedValue.issues[0].context);
+					assert.strictEqual(resolvedValue.issues[1].selector, pa11y.getElementSelector(sharedElement));
+					assert.strictEqual(resolvedValue.issues[1].context, pa11y.getElementContext(sharedElement));
+				});
+
+				describe('and `options.ignore` lists every issue type', function() {
+
+					beforeEach(async function() {
+						options.ignore = ['error', 'warning', 'notice', 'pass'];
+						resolvedValue = await pa11y.run(options);
+					});
+
+					it('keeps the pass and its type', function() {
+						assert.lengthEquals(resolvedValue.issues, 1);
+						assert.strictEqual(resolvedValue.issues[0].code, 'mock-passing-rule');
+						assert.strictEqual(resolvedValue.issues[0].type, 'pass');
+						assert.strictEqual(resolvedValue.issues[0].typeCode, 4);
+					});
+
+				});
+
+				describe('and `options.ignore` lists the passing rule code', function() {
+
+					beforeEach(async function() {
+						options.ignore = ['mock-passing-rule'];
+						resolvedValue = await pa11y.run(options);
+					});
+
+					it('drops the pass, as it drops every issue for an ignored rule', function() {
+						assert.deepEqual(resolvedValue.issues.map(issue => issue.code), ['mock-failing-rule']);
+					});
+
+				});
+
+			});
+
+			describe('when a runner resolves with an issue typed `pass` and `options.includePasses` is not set', function() {
+
+				beforeEach(async function() {
+					pa11y.runners['mock-runner'].returns([
+						{
+							code: 'mock-code',
+							element: createMockElement(),
+							message: 'mock issue',
+							type: 'pass'
+						}
+					]);
+					options.ignore = ['pass'];
+					resolvedValue = await pa11y.run(options);
+				});
+
+				it('applies `options.ignore` to it as before', function() {
+					assert.deepEqual(resolvedValue.issues, []);
 				});
 
 			});

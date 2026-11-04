@@ -103,6 +103,56 @@ describe('lib/runners/axe', function() {
 						}
 					]
 				}
+			],
+			// Axe always returns passes; Pa11y only reports them with `includePasses`
+			passes: [
+				{
+					// Rule-level impact on a passes entry is borrowed from the rule's failing nodes
+					id: 'mock-id-1',
+					description: 'mock description 1',
+					impact: 'critical',
+					help: 'mock help 1',
+					helpUrl: 'mock-help-url-1',
+					nodes: [
+						{
+							impact: null,
+							target: [
+								'mock-selector-pass-1'
+							]
+						}
+					]
+				},
+				{
+					// Or null when the rule failed nowhere
+					id: 'mock-id-pass-2',
+					description: 'mock description pass 2',
+					impact: null,
+					help: 'mock help pass 2',
+					helpUrl: 'mock-help-url-pass-2',
+					nodes: [
+						{
+							impact: null,
+							target: [
+								'mock-selector-2'
+							]
+						}
+					]
+				},
+				{
+					id: 'mock-id-pass-3',
+					description: 'mock description pass 3',
+					impact: 'minor',
+					help: 'mock help pass 3',
+					helpUrl: 'mock-help-url-pass-3',
+					nodes: [
+						{
+							impact: null,
+							target: [
+								'mock-selector-5'
+							]
+						}
+					]
+				}
 			]
 		};
 
@@ -110,7 +160,8 @@ describe('lib/runners/axe', function() {
 		global.window = {
 			axe: {
 				run: sinon.stub().resolves(result),
-				getRules: sinon.stub().returns([])
+				getRules: sinon.stub().returns([]),
+				version: '4.11.1'
 			},
 			document: {
 				querySelector: sinon.stub()
@@ -131,6 +182,8 @@ describe('lib/runners/axe', function() {
 			.withArgs('mock-selector-4b').returns('mock-element-4b');
 		global.window.document.querySelector
 			.withArgs('mock-selector-5').returns('mock-element-5');
+		global.window.document.querySelector
+			.withArgs('mock-selector-pass-1').returns('mock-element-pass-1');
 
 		runner = require('../../../../lib/runners/axe');
 	});
@@ -166,7 +219,7 @@ describe('lib/runners/axe', function() {
 
 		beforeEach(async function() {
 			options = {};
-			pa11y = {};
+			pa11y = {runnerVersions: {}};
 			resolvedValue = await runner.run(options, pa11y);
 		});
 
@@ -310,6 +363,10 @@ describe('lib/runners/axe', function() {
 			]);
 		});
 
+		it('reports the version of the axe that ran in the page', function() {
+			assert.deepEqual(pa11y.runnerVersions, {axe: '4.11.1'});
+		});
+
 		describe('when passing the Pa11y option', function() {
 			describe('rootElement', function() {
 				const cssSelector = '#main';
@@ -397,6 +454,146 @@ describe('lib/runners/axe', function() {
 							'autocomplete-valid': {enabled: false}
 						})
 					);
+				});
+			});
+
+			describe('includePasses', function() {
+				let defaultResolvedValue;
+
+				beforeEach(function() {
+					defaultResolvedValue = resolvedValue;
+				});
+
+				it('reports no passes when unset (the default)', function() {
+					assert.lengthEquals(defaultResolvedValue, 8);
+					assert.isFalse(defaultResolvedValue.some(issue => issue.type === 'pass'));
+					assert.isFalse(defaultResolvedValue.some(issue => 'isPass' in issue.runnerExtras));
+				});
+
+				describe('when set to `false`', function() {
+					beforeEach(async function() {
+						options.includePasses = false;
+						resolvedValue = await runner.run(options, pa11y);
+					});
+
+					it('resolves with exactly the same issues as when unset', function() {
+						assert.deepEqual(resolvedValue, defaultResolvedValue);
+					});
+				});
+
+				describe('when set to `true`', function() {
+					let passes;
+
+					beforeEach(async function() {
+						options.includePasses = true;
+						global.window.axe.run.resetHistory();
+						resolvedValue = await runner.run(options, pa11y);
+						passes = resolvedValue.slice(defaultResolvedValue.length);
+					});
+
+					it('does not change the axe run options', function() {
+						assert.calledWithExactly(
+							global.window.axe.run,
+							global.window.document,
+							{rules: {}}
+						);
+					});
+
+					it('leaves violations and incomplete issues exactly as they are without it', function() {
+						assert.deepEqual(resolvedValue.slice(0, defaultResolvedValue.length), defaultResolvedValue);
+					});
+
+					it('appends one pass per passing node, typed `pass` and flagged `isPass`', function() {
+						assert.deepEqual(passes, [
+							{
+								code: 'mock-id-1',
+								message: 'mock help 1 (mock-help-url-1)',
+								type: 'pass',
+								element: 'mock-element-pass-1',
+								runnerExtras: {
+									description: 'mock description 1',
+									impact: null,
+									needsFurtherReview: false,
+									help: 'mock help 1',
+									helpUrl: 'mock-help-url-1',
+									isPass: true
+								}
+							},
+							{
+								code: 'mock-id-pass-2',
+								message: 'mock help pass 2 (mock-help-url-pass-2)',
+								type: 'pass',
+								element: 'mock-element-2',
+								runnerExtras: {
+									description: 'mock description pass 2',
+									impact: null,
+									needsFurtherReview: false,
+									help: 'mock help pass 2',
+									helpUrl: 'mock-help-url-pass-2',
+									isPass: true
+								}
+							},
+							{
+								code: 'mock-id-pass-3',
+								message: 'mock help pass 3 (mock-help-url-pass-3)',
+								type: 'pass',
+								element: 'mock-element-5',
+								runnerExtras: {
+									description: 'mock description pass 3',
+									impact: null,
+									needsFurtherReview: false,
+									help: 'mock help pass 3',
+									helpUrl: 'mock-help-url-pass-3',
+									isPass: true
+								}
+							}
+						]);
+					});
+
+					it('does not derive the pass type from the borrowed rule-level impact', function() {
+						// 'critical' would map to 'error', null to 'error', 'minor' to 'notice'
+						assert.deepEqual(passes.map(issue => issue.type), ['pass', 'pass', 'pass']);
+					});
+
+					it('resolves pass elements by the same selector lookup as violations', function() {
+						const violation = resolvedValue.find(issue => issue.code === 'mock-id-2');
+						const pass = passes.find(issue => issue.code === 'mock-id-pass-2');
+						assert.strictEqual(pass.element, violation.element);
+						assert.calledWithExactly(global.window.document.querySelector, 'mock-selector-pass-1');
+					});
+
+					it('does not flag violations or incomplete issues as passes', function() {
+						assert.isFalse(
+							resolvedValue
+								.slice(0, defaultResolvedValue.length)
+								.some(issue => 'isPass' in issue.runnerExtras)
+						);
+					});
+
+					describe('and `levelCapWhenNeedsReview` is set', function() {
+						beforeEach(async function() {
+							options.levelCapWhenNeedsReview = 'notice';
+							resolvedValue = await runner.run(options, pa11y);
+						});
+
+						it('still types every pass `pass`', function() {
+							assert.deepEqual(
+								resolvedValue.filter(issue => issue.runnerExtras.isPass).map(issue => issue.type),
+								['pass', 'pass', 'pass']
+							);
+						});
+					});
+
+					describe('and axe returns no passes property', function() {
+						beforeEach(async function() {
+							delete result.passes;
+							resolvedValue = await runner.run(options, pa11y);
+						});
+
+						it('resolves with the violations and incomplete issues only', function() {
+							assert.deepEqual(resolvedValue, defaultResolvedValue);
+						});
+					});
 				});
 			});
 
@@ -527,7 +724,7 @@ describe('lib/runners/axe', function() {
 
 		async function captureFor(checks) {
 			global.window.axe.run = sinon.stub().resolves(incomplete(checks));
-			const resolved = await runner.run({}, {});
+			const resolved = await runner.run({}, {runnerVersions: {}});
 			return resolved[0].runnerExtras;
 		}
 
@@ -588,10 +785,44 @@ describe('lib/runners/axe', function() {
 				],
 				incomplete: []
 			});
-			const extras = (await runner.run({}, {}))[0].runnerExtras;
+			const extras = (await runner.run({}, {runnerVersions: {}}))[0].runnerExtras;
 			assert.isUndefined(extras.cssFg);
 			assert.isUndefined(extras.bbox);
 			assert.isUndefined(extras.axeData);
+		});
+
+		it('does not run the needs-review capture for passes', async function() {
+			global.window.axe.run = sinon.stub().resolves({
+				violations: [],
+				incomplete: [],
+				passes: [
+					{
+						id: 'color-contrast',
+						description: 'd',
+						impact: 'serious',
+						help: 'h',
+						helpUrl: 'u',
+						nodes: [{target: ['mock-selector'],
+							impact: null,
+							any: [{id: 'color-contrast',
+								data: {messageKey: 'bgImage'},
+								relatedNodes: []}]}]
+					}
+				]
+			});
+			const [pass] = await runner.run({includePasses: true}, {runnerVersions: {}});
+			assert.strictEqual(pass.type, 'pass');
+			assert.strictEqual(pass.element, element);
+			assert.notCalled(global.window.getComputedStyle);
+			assert.notCalled(element.getBoundingClientRect);
+			assert.deepEqual(pass.runnerExtras, {
+				description: 'd',
+				impact: null,
+				needsFurtherReview: false,
+				help: 'h',
+				helpUrl: 'u',
+				isPass: true
+			});
 		});
 
 		it('extracts axeData and trimmed axeRelatedNodes from the matching check', async function() {
@@ -790,7 +1021,7 @@ describe('lib/runners/axe', function() {
 					}
 				]
 			});
-			const resolved = await runner.run({}, {});
+			const resolved = await runner.run({}, {runnerVersions: {}});
 			return resolved[0].runnerExtras;
 		}
 

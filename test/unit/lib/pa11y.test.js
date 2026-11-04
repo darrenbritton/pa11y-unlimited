@@ -146,6 +146,7 @@ describe('lib/pa11y', function() {
 					'notice',
 					'warning'
 				],
+				includePasses: false,
 				levelCapWhenNeedsReview: 'error',
 				pa11yVersion: pkg.version,
 				rootElement: pa11y.defaults.rootElement,
@@ -413,6 +414,27 @@ describe('lib/pa11y', function() {
 			it('does not automatically ignore warnings', function() {
 				assert.deepEqual(puppeteer.mockPage.evaluate.thirdCall.args[1].ignore, [
 					'notice'
+				]);
+			});
+
+		});
+
+		describe('when `options.includePasses` is `true`', function() {
+
+			beforeEach(async function() {
+				puppeteer.mockPage.evaluate.resetHistory();
+				options.includePasses = true;
+				await pa11y(options);
+			});
+
+			it('forwards it to the page', function() {
+				assert.isTrue(puppeteer.mockPage.evaluate.thirdCall.args[1].includePasses);
+			});
+
+			it('does not change the default ignore list', function() {
+				assert.deepEqual(puppeteer.mockPage.evaluate.thirdCall.args[1].ignore, [
+					'notice',
+					'warning'
 				]);
 			});
 
@@ -1194,6 +1216,10 @@ describe('lib/pa11y', function() {
 
 		it('has an `includeNotices` property', function() {
 			assert.isFalse(pa11y.defaults.includeNotices);
+		});
+
+		it('has an `includePasses` property', function() {
+			assert.isFalse(pa11y.defaults.includePasses);
 		});
 
 		it('has an `includeWarnings` property', function() {

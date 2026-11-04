@@ -124,7 +124,7 @@ By default, only accessibility issues with a type of `error` will exit with a co
 
 - `error`: exit with a code of `2` on errors only, exit with a code of `0` on warnings and notices
 - `warning`: exit with a code of `2` on errors and warnings, exit with a code of `0` on notices
-- `notice`: exit with a code of `2` on errors, warnings, and notices
+- `notice`: exit with a code of `2` on errors, warnings, and notices (passes, from [`includePasses`](#includepasses-boolean), are never counted)
 - `none`: always exit with a code of `0`
 
 ### Command-line configuration
@@ -244,9 +244,14 @@ Pa11y resolves with a `results` object, containing details about the page, and a
             type: 'error',
             typeCode: 1
         }
-    ]
+    ],
+    runnerVersions: {
+        axe: '4.11.1'
+    }
 }
 ```
+
+`runnerVersions` holds the version of each runner's engine that ran in the page, keyed by runner name. The `axe` runner reports `axe.version`. A runner that reports no version has no entry.
 
 ### Transforming the results
 
@@ -433,6 +438,25 @@ pa11y(url, {
     includeNotices: true
 });
 ```
+
+Defaults to `false`.
+
+### `includePasses` (boolean)
+
+Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in, and with it unset or `false` the results are unchanged.
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true
+});
+```
+
+Each pass is a node from axe's `passes` results, reported with the same `code`, `message`, `selector`, and `context` fields as an issue, and `runnerExtras.isPass` set to `true`. A pass is always typed `pass`: it is never mapped to `error`, `warning`, or `notice` from axe's impact. On a passing node axe's impact is `null`, and the rule-level impact on a `passes` entry is either `null` or borrowed from the same rule's failures elsewhere on the page, so `runnerExtras.impact` is `null` for passes. Passes do not include the extra `runnerExtras` data collected for issues that need review.
+
+`includePasses` is the only switch for passes. The type entries in [`ignore`](#ignore-array), including the `notice` and `warning` entries added by default, never remove a pass. A rule code in `ignore` still removes every result for that rule, passes included. On the command line (set `includePasses` in a [configuration file](#command-line-configuration)), passes are never counted towards [`level`](#level-string) or [`threshold`](#threshold-number).
+
+Passes greatly increase the size of the results. Expect many more passes than issues on a typical page. Pa11y does not shorten `context`, so a page-level pass (for example `html-has-lang` or `document-title`, whose element is `<html>`) carries the full HTML of the page.
 
 Defaults to `false`.
 
@@ -887,6 +911,7 @@ The `run` method is called with two arguments:
 - `pa11y`: The Pa11y test runner, which includes some helper methods:
   - `pa11y.getElementContext(element)`: Get a short HTML context snippet for an element
   - `pa11y.getElementSelector(element)`: Get a unique selector with which you can select this element in a page
+  - `pa11y.runnerVersions`: An object the runner can add its engine's version to, keyed by the runner's name. Pa11y resolves with it as `results.runnerVersions`
 
 The `run` method _must_ resolve with an array of Pa11y issues. These follow the format:
 
@@ -895,7 +920,7 @@ The `run` method _must_ resolve with an array of Pa11y issues. These follow the 
     code: '123', // An identifier for this error
     element: {}, // The HTML element this issue relates to; `null` if no element is involved
     message: 'example', // A description of the issue
-    type: 'error', // 'error', 'warning', or 'notice'
+    type: 'error', // 'error', 'warning', or 'notice' ('pass' is reserved for passes, see `includePasses`)
     runnerExtras: {} // Additional data a runner is free to provide; unused by Pa11y itself
 }
 ```
