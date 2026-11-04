@@ -99,6 +99,34 @@ describe('CLI include passes (axe-only)', function() {
 			}
 		});
 
+		it('keeps axe\'s own target, snippet and checks on every pass', function() {
+			for (const pass of this.passes) {
+				const {axeTarget, axeHtml, axeChecks} = pass.runnerExtras;
+				assert.isArray(axeTarget);
+				assert.isString(axeHtml);
+				assert.isArray(axeChecks.any);
+				assert.isArray(axeChecks.all);
+				assert.isArray(axeChecks.none);
+			}
+			const [imageAlt] = this.passes.filter(({code}) => code === 'image-alt');
+			// Axe's own selector format
+			assert.deepEqual(imageAlt.runnerExtras.axeTarget, ['p > img[src$="described.jpg"]']);
+			assert.strictEqual(imageAlt.runnerExtras.axeHtml, imageAlt.context);
+			const checks = [
+				...imageAlt.runnerExtras.axeChecks.any,
+				...imageAlt.runnerExtras.axeChecks.all,
+				...imageAlt.runnerExtras.axeChecks.none
+			];
+			assert.isTrue(checks.length > 0);
+			for (const check of checks) {
+				assert.isString(check.id);
+				assert.isString(check.message);
+				assert.isArray(check.relatedNodes);
+				assert.isTrue('data' in check);
+				assert.isTrue('impact' in check);
+			}
+		});
+
 		it('is not affected by the `notice` and `warning` entries ignored by default', function() {
 			// Neither --include-notices nor --include-warnings is passed in these runs
 			assert.isTrue(this.passes.some(({code}) => code === 'html-has-lang'));

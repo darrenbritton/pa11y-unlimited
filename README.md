@@ -247,11 +247,14 @@ Pa11y resolves with a `results` object, containing details about the page, and a
     ],
     runnerVersions: {
         axe: '4.11.1'
-    }
+    },
+    runnerDetails: {}
 }
 ```
 
 `runnerVersions` holds the version of each runner's engine that ran in the page, keyed by runner name. The `axe` runner reports `axe.version`. A runner that reports no version has no entry.
+
+`runnerDetails` holds run-level details from each runner, keyed by runner name. The `axe` runner reports them only with [`includePasses`](#includepasses-boolean) set: `testEngine`, `testRunner`, `testEnvironment` (user agent, window size and orientation), `timestamp`, `url`, `toolOptions` (the options axe ran with, including the rule tags) and `inapplicable` (the rules that found nothing on the page to check), each as axe returns it. A runner that reports no details has no entry.
 
 ### Transforming the results
 
@@ -443,7 +446,14 @@ Defaults to `false`.
 
 ### `includePasses` (boolean)
 
-Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in: with it unset or `false`, no passes are reported, and the other results are unchanged (`runnerVersions` is always present).
+Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in: with it unset or `false`, no passes are reported, and the other results are unchanged (`runnerVersions` and `runnerDetails` are always present).
+
+Each pass keeps what axe recorded about it in `runnerExtras`, as evidence of the pass:
+
+- `axeChecks`: every check axe ran on the element, as `{any, all, none}`, each check with all its fields: `id`, `impact`, `message`, `data` (what axe measured or found, for example the colours and contrast ratio for `color-contrast`) and `relatedNodes` (other elements the check relied on, such as the `<label>` that names an input, each with its `target` and `html`).
+- `axeTarget` and `axeHtml`: axe's own selector and HTML snippet for the element. They still identify an element the Pa11y selector lookup can't reach, such as one inside a shadow root or an iframe, where the pass's `selector` and `context` are empty.
+
+With it set, the axe runner also reports its run-level details in `results.runnerDetails.axe` (see [the results object](#javascript-interface)).
 
 ```js
 pa11y(url, {
@@ -912,6 +922,7 @@ The `run` method is called with two arguments:
   - `pa11y.getElementContext(element)`: Get a short HTML context snippet for an element
   - `pa11y.getElementSelector(element)`: Get a unique selector with which you can select this element in a page
   - `pa11y.runnerVersions`: An object the runner can add its engine's version to, keyed by the runner's name. Pa11y resolves with it as `results.runnerVersions`
+  - `pa11y.runnerDetails`: An object the runner can add run-level details to, keyed by the runner's name. Pa11y resolves with it as `results.runnerDetails`
 
 The `run` method _must_ resolve with an array of Pa11y issues. These follow the format:
 

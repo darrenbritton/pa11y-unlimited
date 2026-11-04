@@ -146,6 +146,34 @@ describe('lib/runner', function() {
 
 			});
 
+			it('resolves with an empty `runnerDetails` object when no runner reports its run details', function() {
+				assert.deepEqual(resolvedValue.runnerDetails, {});
+			});
+
+			describe('when a runner reports its run details', function() {
+				const details = {timestamp: '2026-11-04T12:00:00.000Z',
+					inapplicable: []};
+
+				beforeEach(async function() {
+					pa11y.runners['mock-runner'].callsFake((runOptions, runnerPa11y) => {
+						runnerPa11y.runnerDetails['mock-runner'] = details;
+						return Promise.resolve([]);
+					});
+					resolvedValue = await pa11y.run(options);
+				});
+
+				it('resolves with those details under the runner\'s name', function() {
+					assert.deepEqual(resolvedValue.runnerDetails, {'mock-runner': details});
+				});
+
+				it('reports nothing from it on a later run in which no runner reports details', async function() {
+					pa11y.runners['mock-runner'] = sinon.stub().resolves([]);
+					resolvedValue = await pa11y.run(options);
+					assert.deepEqual(resolvedValue.runnerDetails, {});
+				});
+
+			});
+
 			describe('when an issue type is not found', function() {
 
 				beforeEach(async function() {

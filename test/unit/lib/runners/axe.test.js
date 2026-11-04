@@ -132,8 +132,33 @@ describe('lib/runners/axe', function() {
 					nodes: [
 						{
 							impact: null,
+							html: '<input id="name">',
 							target: [
 								'mock-selector-2'
+							],
+							any: [
+								{
+									id: 'explicit-label',
+									impact: 'critical',
+									message: 'Element has an explicit <label>',
+									data: null,
+									relatedNodes: [
+										{
+											html: '<label for="name">Name</label>',
+											target: ['label']
+										}
+									]
+								}
+							],
+							all: [],
+							none: [
+								{
+									id: 'mock-none-check',
+									impact: 'serious',
+									message: 'mock none message',
+									data: {mockKey: 'mock value'},
+									relatedNodes: []
+								}
 							]
 						}
 					]
@@ -219,7 +244,10 @@ describe('lib/runners/axe', function() {
 
 		beforeEach(async function() {
 			options = {};
-			pa11y = {runnerVersions: {}};
+			pa11y = {
+				runnerDetails: {},
+				runnerVersions: {}
+			};
 			resolvedValue = await runner.run(options, pa11y);
 		});
 
@@ -365,6 +393,10 @@ describe('lib/runners/axe', function() {
 
 		it('reports the version of the axe that ran in the page', function() {
 			assert.deepEqual(pa11y.runnerVersions, {axe: '4.11.1'});
+		});
+
+		it('reports no run details without `includePasses`', function() {
+			assert.deepEqual(pa11y.runnerDetails, {});
 		});
 
 		describe('when passing the Pa11y option', function() {
@@ -516,7 +548,14 @@ describe('lib/runners/axe', function() {
 									needsFurtherReview: false,
 									help: 'mock help 1',
 									helpUrl: 'mock-help-url-1',
-									isPass: true
+									isPass: true,
+									axeTarget: ['mock-selector-pass-1'],
+									axeHtml: null,
+									axeChecks: {
+										any: [],
+										all: [],
+										none: []
+									}
 								}
 							},
 							{
@@ -530,7 +569,14 @@ describe('lib/runners/axe', function() {
 									needsFurtherReview: false,
 									help: 'mock help pass 2',
 									helpUrl: 'mock-help-url-pass-2',
-									isPass: true
+									isPass: true,
+									axeTarget: ['mock-selector-2'],
+									axeHtml: '<input id="name">',
+									axeChecks: {
+										any: result.passes[1].nodes[0].any,
+										all: [],
+										none: result.passes[1].nodes[0].none
+									}
 								}
 							},
 							{
@@ -544,10 +590,114 @@ describe('lib/runners/axe', function() {
 									needsFurtherReview: false,
 									help: 'mock help pass 3',
 									helpUrl: 'mock-help-url-pass-3',
-									isPass: true
+									isPass: true,
+									axeTarget: ['mock-selector-5'],
+									axeHtml: null,
+									axeChecks: {
+										any: [],
+										all: [],
+										none: []
+									}
 								}
 							}
 						]);
+					});
+
+					it('keeps every check axe ran on a pass, with all of each check\'s fields', function() {
+						const pass = passes.find(issue => issue.code === 'mock-id-pass-2');
+						assert.deepEqual(pass.runnerExtras.axeChecks.any, [
+							{
+								id: 'explicit-label',
+								impact: 'critical',
+								message: 'Element has an explicit <label>',
+								data: null,
+								relatedNodes: [
+									{
+										html: '<label for="name">Name</label>',
+										target: ['label']
+									}
+								]
+							}
+						]);
+						assert.deepEqual(pass.runnerExtras.axeChecks.none, [
+							{
+								id: 'mock-none-check',
+								impact: 'serious',
+								message: 'mock none message',
+								data: {mockKey: 'mock value'},
+								relatedNodes: []
+							}
+						]);
+					});
+
+					it('keeps axe\'s target and snippet for a pass pa11y cannot find in the page', async function() {
+						const shadowTarget = [['#mock-host', '#mock-inner']];
+						result.passes = [
+							{
+								id: 'mock-id-shadow',
+								description: 'd',
+								impact: null,
+								help: 'h',
+								helpUrl: 'u',
+								nodes: [
+									{
+										impact: null,
+										html: '<button>Shadow</button>',
+										target: shadowTarget
+									}
+								]
+							}
+						];
+						const [shadowPass] = (await runner.run(options, pa11y)).filter(issue => issue.type === 'pass');
+						assert.isUndefined(shadowPass.element);
+						assert.deepEqual(shadowPass.runnerExtras.axeTarget, shadowTarget);
+						assert.strictEqual(shadowPass.runnerExtras.axeHtml, '<button>Shadow</button>');
+					});
+
+					describe('and axe reports run-level results', function() {
+						beforeEach(async function() {
+							Object.assign(result, {
+								testEngine: {name: 'axe-core',
+									version: '4.11.1'},
+								testRunner: {name: 'axe'},
+								testEnvironment: {userAgent: 'mock-agent',
+									windowWidth: 1280,
+									windowHeight: 800},
+								timestamp: '2026-11-04T12:00:00.000Z',
+								url: 'https://example.com/',
+								toolOptions: {reporter: 'v1',
+									runOnly: {type: 'tags',
+										values: ['wcag2a']}},
+								inapplicable: [
+									{id: 'mock-inapplicable',
+										impact: null,
+										tags: ['wcag2a'],
+										description: 'mock inapplicable description',
+										help: 'mock inapplicable help',
+										helpUrl: 'mock-inapplicable-help-url',
+										nodes: []}
+								]
+							});
+							resolvedValue = await runner.run(options, pa11y);
+						});
+
+						it('reports them as the axe run details', function() {
+							assert.deepEqual(pa11y.runnerDetails, {
+								axe: {
+									testEngine: result.testEngine,
+									testRunner: result.testRunner,
+									testEnvironment: result.testEnvironment,
+									timestamp: result.timestamp,
+									url: result.url,
+									toolOptions: result.toolOptions,
+									inapplicable: result.inapplicable
+								}
+							});
+						});
+					});
+
+					it('reports an empty inapplicable list when axe returns none', function() {
+						assert.deepEqual(pa11y.runnerDetails.axe.inapplicable, []);
 					});
 
 					it('does not derive the pass type from the borrowed rule-level impact', function() {
@@ -810,7 +960,10 @@ describe('lib/runners/axe', function() {
 					}
 				]
 			});
-			const [pass] = await runner.run({includePasses: true}, {runnerVersions: {}});
+			const [pass] = await runner.run({includePasses: true}, {
+				runnerDetails: {},
+				runnerVersions: {}
+			});
 			assert.strictEqual(pass.type, 'pass');
 			assert.strictEqual(pass.element, element);
 			assert.notCalled(global.window.getComputedStyle);
@@ -821,7 +974,16 @@ describe('lib/runners/axe', function() {
 				needsFurtherReview: false,
 				help: 'h',
 				helpUrl: 'u',
-				isPass: true
+				isPass: true,
+				axeTarget: ['mock-selector'],
+				axeHtml: null,
+				axeChecks: {
+					any: [{id: 'color-contrast',
+						data: {messageKey: 'bgImage'},
+						relatedNodes: []}],
+					all: [],
+					none: []
+				}
 			});
 		});
 

@@ -3,6 +3,8 @@
 ## 9.10.0 (2026-11-04)
 
 * Add an opt-in `includePasses` option. With it set, the axe runner also reports each passing node as a result typed `pass` (`typeCode` `4`), after the violations and incompletes. Passes never go through the error/warning/notice level logic, no type entry in `ignore` drops one, and the CLI's `--level` and `threshold` never count one. Off by default, so existing callers see no change. Passes are large: a page-level pass carries the page's full HTML as `context`. (DEV-1194, #29)
+* Each pass keeps what axe recorded about it, as evidence of the pass: `runnerExtras.axeChecks` holds every check axe ran on the element (`any`, `all` and `none`, each check with its `id`, `impact`, `message`, `data` and `relatedNodes`), and `runnerExtras.axeTarget` and `axeHtml` hold axe's own selector and snippet, which still identify an element inside a shadow root or an iframe that the Pa11y selector can't reach.
+* Results now include `runnerDetails`, run-level details keyed by runner name. With `includePasses` set, the axe runner reports its `testEngine`, `testRunner`, `testEnvironment`, `timestamp`, `url`, `toolOptions` and `inapplicable` rules, as axe returns them; otherwise it's empty.
 * Results now include `runnerVersions`, the version of each runner's engine that ran in the page, keyed by runner name; the axe runner reports `axe.version`, for example `{axe: '4.11.1'}`. It sits beside `issues`, and every reporter prints only `issues`, so CLI output is unchanged. (DEV-1194, #29)
 
 ### Full diff for `pa11y-unlimited@9.10.0`
