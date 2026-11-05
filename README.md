@@ -466,7 +466,7 @@ Each pass is a node from axe's `passes` results, reported with the same `code`, 
 
 `includePasses` is the only switch for passes. The type entries in [`ignore`](#ignore-array), including the `notice` and `warning` entries added by default, never remove a pass. A rule code in `ignore` still removes every result for that rule, passes included. On the command line (set `includePasses` in a [configuration file](#command-line-configuration)), passes are never counted towards [`level`](#level-string) or [`threshold`](#threshold-number).
 
-Passes greatly increase the size of the results. Expect many more passes than issues on a typical page. Pa11y does not shorten `context`, so a page-level pass (for example `html-has-lang` or `document-title`, whose element is `<html>`) carries the full HTML of the page.
+Passes greatly increase the size of the results. Expect many more passes than issues on a typical page. By default Pa11y does not shorten `context`, so a pass on a large element, or a page-level pass (for example `html-has-lang` or `document-title`, whose element is `<html>`), carries that element's full HTML. Use [`passContextMaxDepth`](#passcontextmaxdepth-number), [`passContextTrimAbove`](#passcontexttrimabove-number) and [`passContextMaxLength`](#passcontextmaxlength-number) to limit it.
 
 Defaults to `false`.
 
@@ -531,6 +531,45 @@ pa11y(url, {
 ```
 
 Defaults to `GET`.
+
+### `passContextMaxDepth` (number)
+
+How many levels of nested elements to keep in a long pass's `context`, used with [`includePasses`](#includepasses-boolean). When a pass's context is longer than [`passContextTrimAbove`](#passcontexttrimabove-number) characters (or any context, when that is unset), Pa11y rebuilds it from the element and its descendants down to this many levels below it. Elements at that last level are kept as empty tags; text, attributes and comments nearer the element are kept as they are. The shortened context records its full length in `runnerExtras.contextFullLength` and `runnerExtras.contextTrimmed: 'depth'`.
+
+Nothing nearer the element than the limit is lost. If your own processing reads only a few levels of an element's HTML, set this above that depth, and check the result against full contexts on real pages: an HTML parser can shift the depth it sees, for example by dropping table tags found outside a table. It never affects other result types, and a pass on the document element (`<html>`) always keeps the whole page, which its page-level checks are about. Anything other than a whole number above zero means no limit.
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true,
+    passContextTrimAbove: 1000,
+    passContextMaxDepth: 6
+});
+```
+
+Defaults to `null` (no limit).
+
+### `passContextMaxLength` (number)
+
+A safety net for the size of a pass's `context`, used with [`includePasses`](#includepasses-boolean). A context still longer than this many characters, after any [`passContextMaxDepth`](#passcontextmaxdepth-number) limit, is cut to this length, and `runnerExtras.contextTrimmed` is `length` rather than `depth`, because content may have been lost. The cut falls on raw HTML, so it can land inside a tag. It never affects other result types or a pass on `<html>`. Anything other than a whole number above zero means no limit.
+
+Use it to keep a large page's results small enough to pass from the browser back to Node: Puppeteer refuses a single message over 256 MB. `runnerExtras.axeHtml` always holds axe's own short snippet of the element.
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true,
+    passContextMaxLength: 131072
+});
+```
+
+Defaults to `null` (no limit).
+
+### `passContextTrimAbove` (number)
+
+The length in characters above which [`passContextMaxDepth`](#passcontextmaxdepth-number) shortens a pass's `context`. A context of this length or shorter is kept whole. Set it to the length below which your own processing keeps a context as it is, so Pa11y only shortens contexts you would trim anyway. Anything other than a whole number above zero means every context is considered.
+
+Defaults to `null`.
 
 ### `postData` (string)
 

@@ -5,18 +5,33 @@ const assert = require('proclaim');
 const runPa11yCli = require('../helper/pa11y-cli');
 
 // `includePasses` has no CLI flag; the CLI picks it up from a config file.
-function runWithAxe({includePasses, extraArguments = []} = {}) {
+function runWithAxe({includePasses, config = 'include-passes', extraArguments = []} = {}) {
 	return runPa11yCli(`${global.mockWebsiteAddress}/include-passes`, {
 		arguments: [
 			'--runner', 'axe',
 			'--reporter', 'json',
-			...includePasses ? ['--config', './mock/config/include-passes.json'] : [],
+			...includePasses ? ['--config', `./mock/config/${config}.json`] : [],
 			...extraArguments
 		]
 	});
 }
 
 const isPass = issue => issue.type === 'pass';
+
+const findUncapped = (uncappedPasses, pass) => uncappedPasses.find(
+	({code, selector}) => code === pass.code && selector === pass.selector
+);
+
+const openingTag = html => html.slice(0, html.indexOf('>') + 1);
+
+function assertDocumentPassesWhole(passes, uncappedPasses) {
+	const documentPasses = passes.filter(({selector}) => selector === 'html');
+	assert.isTrue(documentPasses.length > 0);
+	for (const pass of documentPasses) {
+		assert.strictEqual(pass.context, findUncapped(uncappedPasses, pass).context);
+		assert.isUndefined(pass.runnerExtras.contextFullLength);
+	}
+}
 
 describe('CLI include passes (axe-only)', function() {
 	before(async function() {
@@ -140,6 +155,72 @@ describe('CLI include passes (axe-only)', function() {
 			});
 			assert.isTrue(response.json.filter(isPass).length > 1);
 			assert.strictEqual(response.exitCode, 0);
+		});
+
+		describe('and `passContextTrimAbove` and `passContextMaxDepth` are set', function() {
+			const trimAbove = 40;
+
+			before(async function() {
+				this.depth = await runWithAxe({includePasses: true,
+					config: 'include-passes-depth'});
+				this.depthPasses = this.depth.json.filter(isPass);
+			});
+
+			it('outputs the same violations as without them', function() {
+				const violations = response => response.json.filter(issue => !isPass(issue));
+				assert.deepEqual(violations(this.depth), violations(this.on));
+			});
+
+			it('limits the depth of long pass contexts only, recording the full length', function() {
+				let trimmed = 0;
+				for (const pass of this.depthPasses.filter(({selector}) => selector !== 'html')) {
+					const uncapped = findUncapped(this.passes, pass);
+					if (pass.runnerExtras.contextTrimmed) {
+						trimmed += 1;
+						assert.strictEqual(pass.runnerExtras.contextTrimmed, 'depth');
+						assert.strictEqual(pass.runnerExtras.contextFullLength, uncapped.context.length);
+						assert.isTrue(uncapped.context.length > trimAbove);
+						assert.isTrue(pass.context.length < uncapped.context.length);
+						assert.strictEqual(openingTag(pass.context), openingTag(uncapped.context));
+					} else {
+						assert.strictEqual(pass.context, uncapped.context);
+					}
+				}
+				assert.isTrue(trimmed > 0);
+			});
+
+			it('keeps the full context of every pass on `html`', function() {
+				assertDocumentPassesWhole(this.depthPasses, this.passes);
+			});
+		});
+
+		describe('and `passContextMaxLength` is set', function() {
+			const limit = 40;
+
+			before(async function() {
+				this.capped = await runWithAxe({includePasses: true,
+					config: 'include-passes-capped'});
+				this.cappedPasses = this.capped.json.filter(isPass);
+			});
+
+			it('cuts the context of every long pass not on `html`, marking it `length`', function() {
+				const notDocument = this.cappedPasses.filter(({selector}) => selector !== 'html');
+				assert.isTrue(notDocument.some(pass => pass.runnerExtras.contextTrimmed === 'length'));
+				for (const pass of notDocument) {
+					const uncapped = findUncapped(this.passes, pass);
+					assert.strictEqual(pass.context, uncapped.context.slice(0, limit));
+					if (uncapped.context.length > limit) {
+						assert.strictEqual(pass.runnerExtras.contextTrimmed, 'length');
+						assert.strictEqual(pass.runnerExtras.contextFullLength, uncapped.context.length);
+					} else {
+						assert.isUndefined(pass.runnerExtras.contextFullLength);
+					}
+				}
+			});
+
+			it('keeps the full context of every pass on `html`', function() {
+				assertDocumentPassesWhole(this.cappedPasses, this.passes);
+			});
 		});
 
 		it('labels passes in the CLI reporter', async function() {

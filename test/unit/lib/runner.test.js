@@ -271,6 +271,158 @@ describe('lib/runner', function() {
 
 				});
 
+				it('keeps the full context of a pass when `options.passContextMaxLength` is not set', function() {
+					assert.strictEqual(resolvedValue.issues[1].context, '<img id="shared-element">');
+					assert.isUndefined(resolvedValue.issues[1].runnerExtras.contextFullLength);
+				});
+
+			});
+
+			describe('when a runner resolves with passes and the pass context options are set', function() {
+				const fakeText = data => ({
+					nodeType: 3,
+					cloneNode: () => fakeText(data),
+					serialized: data
+				});
+				const fakeComment = data => ({
+					nodeType: 8,
+					cloneNode: () => fakeComment(data),
+					serialized: `<!--${data}-->`
+				});
+				const fakeElement = (tag, attributes, childNodes = []) => ({
+					nodeType: 1,
+					childNodes,
+					cloneNode: () => fakeElement(tag, attributes),
+					appendChild(node) {
+						this.childNodes.push(node);
+					},
+					get serialized() {
+						return `<${tag}${attributes}>${this.childNodes.map(node => node.serialized).join('')}</${tag}>`;
+					},
+					get outerHTML() {
+						return this.serialized;
+					}
+				});
+				const tree = fakeElement('div', ' id="deep"', [
+					fakeElement('p', '', [
+						fakeText('one'),
+						fakeElement('span', '', [
+							fakeText('two'),
+							fakeElement('em', '', [fakeText('three')])
+						])
+					]),
+					fakeComment('note'),
+					fakeText('x'.repeat(60))
+				]);
+				const fullHtml = tree.serialized;
+				const depthTwoHtml = `<div id="deep"><p>one<span></span></p><!--note-->${'x'.repeat(60)}</div>`;
+				let deepElement;
+				let originalDocumentElement;
+
+				beforeEach(async function() {
+					deepElement = createMockElement({
+						id: 'deep',
+						outerHTML: fullHtml,
+						childNodes: tree.childNodes,
+						cloneNode: () => fakeElement('div', ' id="deep"')
+					});
+					originalDocumentElement = global.window.document.documentElement;
+					pa11y.runners['mock-runner'].returns([
+						{
+							code: 'mock-failing-rule',
+							element: deepElement,
+							message: 'mock violation',
+							type: 'error'
+						},
+						{
+							code: 'mock-passing-rule',
+							element: deepElement,
+							message: 'mock pass',
+							type: 'pass',
+							runnerExtras: {isPass: true}
+						}
+					]);
+					options.includePasses = true;
+					options.passContextTrimAbove = 20;
+					options.passContextMaxDepth = 2;
+					resolvedValue = await pa11y.run(options);
+				});
+
+				afterEach(function() {
+					global.window.document.documentElement = originalDocumentElement;
+				});
+
+				it('keeps the element and its descendants down to `passContextMaxDepth` levels, the last level empty', function() {
+					assert.strictEqual(resolvedValue.issues[1].context, depthTwoHtml);
+					assert.deepEqual(resolvedValue.issues[1].runnerExtras, {
+						isPass: true,
+						contextFullLength: fullHtml.length,
+						contextTrimmed: 'depth'
+					});
+				});
+
+				it('keeps a pass context no longer than `passContextTrimAbove` whole', async function() {
+					options.passContextTrimAbove = fullHtml.length;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, fullHtml);
+					assert.isUndefined(resolvedValue.issues[1].runnerExtras.contextFullLength);
+				});
+
+				it('limits the depth of any pass context when `passContextTrimAbove` is unset', async function() {
+					options.passContextTrimAbove = null;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, depthTwoHtml);
+				});
+
+				it('keeps the full context when nothing is nested deeper than the limit', async function() {
+					options.passContextMaxDepth = 10;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, fullHtml);
+					assert.isUndefined(resolvedValue.issues[1].runnerExtras.contextTrimmed);
+				});
+
+				it('cuts a context still longer than `passContextMaxLength`, marking it `length`', async function() {
+					options.passContextMaxLength = 30;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, depthTwoHtml.slice(0, 30));
+					assert.deepEqual(resolvedValue.issues[1].runnerExtras, {
+						isPass: true,
+						contextFullLength: fullHtml.length,
+						contextTrimmed: 'length'
+					});
+				});
+
+				it('cuts at `passContextMaxLength` when no depth limit is set', async function() {
+					options.passContextMaxDepth = null;
+					options.passContextMaxLength = 30;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, fullHtml.slice(0, 30));
+					assert.strictEqual(resolvedValue.issues[1].runnerExtras.contextTrimmed, 'length');
+				});
+
+				it('keeps the full context of a violation on the same element', function() {
+					assert.strictEqual(resolvedValue.issues[0].context, fullHtml);
+					assert.isUndefined(resolvedValue.issues[0].runnerExtras.contextFullLength);
+				});
+
+				it('keeps the full context of a pass on the document element', async function() {
+					global.window.document.documentElement = deepElement;
+					options.passContextMaxLength = 30;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, fullHtml);
+					assert.isUndefined(resolvedValue.issues[1].runnerExtras.contextFullLength);
+				});
+
+				it('ignores limits that are not whole numbers above zero', async function() {
+					options.passContextTrimAbove = null;
+					for (const limit of [0, -1, 1.5, '20', null]) {
+						options.passContextMaxDepth = limit;
+						options.passContextMaxLength = limit;
+						resolvedValue = await pa11y.run(options);
+						assert.strictEqual(resolvedValue.issues[1].context, fullHtml);
+					}
+				});
+
 			});
 
 			describe('when a runner resolves with an issue typed `pass` and `options.includePasses` is not set', function() {
