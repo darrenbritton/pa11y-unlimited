@@ -203,10 +203,9 @@ describe('CLI include passes (axe-only)', function() {
 				this.cappedPasses = this.capped.json.filter(isPass);
 			});
 
-			it('cuts the context of every long pass not on `html`, marking it `length`', function() {
-				const notDocument = this.cappedPasses.filter(({selector}) => selector !== 'html');
-				assert.isTrue(notDocument.some(pass => pass.runnerExtras.contextTrimmed === 'length'));
-				for (const pass of notDocument) {
+			it('cuts the context of every long pass, marking it `length`', function() {
+				assert.isTrue(this.cappedPasses.some(pass => pass.runnerExtras.contextTrimmed === 'length'));
+				for (const pass of this.cappedPasses) {
 					const uncapped = findUncapped(this.passes, pass);
 					assert.strictEqual(pass.context, uncapped.context.slice(0, limit));
 					if (uncapped.context.length > limit) {
@@ -218,8 +217,16 @@ describe('CLI include passes (axe-only)', function() {
 				}
 			});
 
-			it('keeps the full context of every pass on `html`', function() {
-				assertDocumentPassesWhole(this.cappedPasses, this.passes);
+			it('cuts every pass on `html` too, since each carries the whole page', function() {
+				const documentPasses = this.cappedPasses.filter(({selector}) => selector === 'html');
+				assert.isTrue(documentPasses.length > 0);
+				for (const pass of documentPasses) {
+					assert.strictEqual(pass.runnerExtras.contextTrimmed, 'length');
+					assert.strictEqual(
+						pass.runnerExtras.contextFullLength,
+						findUncapped(this.passes, pass).context.length
+					);
+				}
 			});
 		});
 

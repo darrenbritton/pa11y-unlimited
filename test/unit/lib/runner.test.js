@@ -279,20 +279,21 @@ describe('lib/runner', function() {
 			});
 
 			describe('when a runner resolves with passes and the pass context options are set', function() {
+				// The fakes have no `cloneNode`, so copying a node in the page itself would throw
 				const fakeText = data => ({
 					nodeType: 3,
-					cloneNode: () => fakeText(data),
+					inertCopy: () => fakeText(data),
 					serialized: data
 				});
 				const fakeComment = data => ({
 					nodeType: 8,
-					cloneNode: () => fakeComment(data),
+					inertCopy: () => fakeComment(data),
 					serialized: `<!--${data}-->`
 				});
 				const fakeElement = (tag, attributes, childNodes = []) => ({
 					nodeType: 1,
 					childNodes,
-					cloneNode: () => fakeElement(tag, attributes),
+					inertCopy: () => fakeElement(tag, attributes),
 					appendChild(node) {
 						this.childNodes.push(node);
 					},
@@ -317,15 +318,22 @@ describe('lib/runner', function() {
 				const fullHtml = tree.serialized;
 				const depthTwoHtml = `<div id="deep"><p>one<span></span></p><!--note-->${'x'.repeat(60)}</div>`;
 				let deepElement;
+				let inertDocument;
 				let originalDocumentElement;
+				let originalImplementation;
 
 				beforeEach(async function() {
 					deepElement = createMockElement({
 						id: 'deep',
 						outerHTML: fullHtml,
 						childNodes: tree.childNodes,
-						cloneNode: () => fakeElement('div', ' id="deep"')
+						inertCopy: () => fakeElement('div', ' id="deep"')
 					});
+					inertDocument = {importNode: sinon.spy(node => node.inertCopy())};
+					originalImplementation = global.window.document.implementation;
+					global.window.document.implementation = {
+						createHTMLDocument: sinon.stub().returns(inertDocument)
+					};
 					originalDocumentElement = global.window.document.documentElement;
 					pa11y.runners['mock-runner'].returns([
 						{
@@ -350,6 +358,7 @@ describe('lib/runner', function() {
 
 				afterEach(function() {
 					global.window.document.documentElement = originalDocumentElement;
+					global.window.document.implementation = originalImplementation;
 				});
 
 				it('keeps the element and its descendants down to `passContextMaxDepth` levels, the last level empty', function() {
@@ -359,6 +368,12 @@ describe('lib/runner', function() {
 						contextFullLength: fullHtml.length,
 						contextTrimmed: 'depth'
 					});
+				});
+
+				it('copies nodes into one document with no browsing context, never in the page', function() {
+					sinon.assert.calledOnce(global.window.document.implementation.createHTMLDocument);
+					assert.isTrue(inertDocument.importNode.called);
+					sinon.assert.alwaysCalledWith(inertDocument.importNode, sinon.match.object, false);
 				});
 
 				it('keeps a pass context no longer than `passContextTrimAbove` whole', async function() {
@@ -405,12 +420,23 @@ describe('lib/runner', function() {
 					assert.isUndefined(resolvedValue.issues[0].runnerExtras.contextFullLength);
 				});
 
-				it('keeps the full context of a pass on the document element', async function() {
+				it('never limits the depth of a pass on the document element', async function() {
 					global.window.document.documentElement = deepElement;
-					options.passContextMaxLength = 30;
 					resolvedValue = await pa11y.run(options);
 					assert.strictEqual(resolvedValue.issues[1].context, fullHtml);
 					assert.isUndefined(resolvedValue.issues[1].runnerExtras.contextFullLength);
+				});
+
+				it('cuts a pass on the document element at `passContextMaxLength`, marking it `length`', async function() {
+					global.window.document.documentElement = deepElement;
+					options.passContextMaxLength = 30;
+					resolvedValue = await pa11y.run(options);
+					assert.strictEqual(resolvedValue.issues[1].context, fullHtml.slice(0, 30));
+					assert.deepEqual(resolvedValue.issues[1].runnerExtras, {
+						isPass: true,
+						contextFullLength: fullHtml.length,
+						contextTrimmed: 'length'
+					});
 				});
 
 				it('ignores limits that are not whole numbers above zero', async function() {

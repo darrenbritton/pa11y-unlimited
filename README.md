@@ -451,7 +451,7 @@ Whether to include the elements that each rule checked and found no problem with
 Each pass keeps what axe recorded about it in `runnerExtras`, as evidence of the pass:
 
 - `axeChecks`: every check axe ran on the element, as `{any, all, none}`, each check with all its fields: `id`, `impact`, `message`, `data` (what axe measured or found, for example the colours and contrast ratio for `color-contrast`) and `relatedNodes` (other elements the check relied on, such as the `<label>` that names an input, each with its `target` and `html`).
-- `axeTarget` and `axeHtml`: axe's own selector and HTML snippet for the element. They still identify an element the Pa11y selector lookup can't reach, such as one inside a shadow root or an iframe, where the pass's `selector` and `context` are empty.
+- `axeTarget` and `axeHtml`: axe's own selector and HTML snippet for the element. They identify the element itself where the pass's `selector` and `context` can't: inside a shadow root, those name the shadow host, and inside an iframe they are empty.
 
 With it set, the axe runner also reports its run-level details in `results.runnerDetails.axe` (see [the results object](#javascript-interface)).
 
@@ -536,7 +536,7 @@ Defaults to `GET`.
 
 How many levels of nested elements to keep in a long pass's `context`, used with [`includePasses`](#includepasses-boolean). When a pass's context is longer than [`passContextTrimAbove`](#passcontexttrimabove-number) characters (or any context, when that is unset), Pa11y rebuilds it from the element and its descendants down to this many levels below it. Elements at that last level are kept as empty tags; text, attributes and comments nearer the element are kept as they are. The shortened context records its full length in `runnerExtras.contextFullLength` and `runnerExtras.contextTrimmed: 'depth'`.
 
-Nothing nearer the element than the limit is lost. If your own processing reads only a few levels of an element's HTML, set this above that depth, and check the result against full contexts on real pages: an HTML parser can shift the depth it sees, for example by dropping table tags found outside a table. It never affects other result types, and a pass on the document element (`<html>`) always keeps the whole page, which its page-level checks are about. Anything other than a whole number above zero means no limit.
+Nothing nearer the element than the limit is lost. If your own processing reads only a few levels of an element's HTML, set this above that depth, and check the result against full contexts on real pages: an HTML parser can shift the depth it sees, for example by dropping table tags found outside a table. It never affects other result types, or a pass on the document element (`<html>`), whose page-level checks are about the whole page; only [`passContextMaxLength`](#passcontextmaxlength-number) cuts that. Anything other than a whole number above zero means no limit.
 
 ```js
 pa11y(url, {
@@ -551,7 +551,7 @@ Defaults to `null` (no limit).
 
 ### `passContextMaxLength` (number)
 
-A safety net for the size of a pass's `context`, used with [`includePasses`](#includepasses-boolean). A context still longer than this many characters, after any [`passContextMaxDepth`](#passcontextmaxdepth-number) limit, is cut to this length, and `runnerExtras.contextTrimmed` is `length` rather than `depth`, because content may have been lost. The cut falls on raw HTML, so it can land inside a tag. It never affects other result types or a pass on `<html>`. Anything other than a whole number above zero means no limit.
+A safety net for the size of a pass's `context`, used with [`includePasses`](#includepasses-boolean). A context still longer than this many characters, after any [`passContextMaxDepth`](#passcontextmaxdepth-number) limit, is cut to this length, and `runnerExtras.contextTrimmed` is `length` rather than `depth`, because content may have been lost. The cut falls on raw HTML, so it can land inside a tag. It never affects other result types. It does cut a pass on `<html>`, which is never depth-limited and carries the whole page. Anything other than a whole number above zero means no limit.
 
 Use it to keep a large page's results small enough to pass from the browser back to Node: Puppeteer refuses a single message over 256 MB. `runnerExtras.axeHtml` always holds axe's own short snippet of the element.
 
