@@ -1,6 +1,6 @@
 # Changelog
 
-## 9.10.0 (2026-11-04)
+## 9.10.0 (2026-11-06)
 
 * Add an opt-in `includePasses` option. With it set, the axe runner also reports each passing node as a result typed `pass` (`typeCode` `4`), after the violations and incompletes. Passes never go through the error/warning/notice level logic, no type entry in `ignore` drops one, and the CLI's `--level` and `threshold` never count one. Off by default, so existing callers see no change. Passes are large: a pass carries its element's full HTML as `context`, so a page-level pass carries the whole page; see the pass context options below to shorten them.
 * Each pass keeps what axe recorded about it, as evidence of the pass: `runnerExtras.axeChecks` holds every check axe ran on the element (`any`, `all` and `none`, each check with its `id`, `impact`, `message`, `data` and `relatedNodes`), and `runnerExtras.axeTarget` and `axeHtml` hold axe's own selector and snippet, which identify the element itself when it is inside a shadow root (where the pass's `selector` and `context` name the shadow host) or an iframe (where they are empty).
