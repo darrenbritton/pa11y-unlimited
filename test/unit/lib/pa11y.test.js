@@ -146,8 +146,12 @@ describe('lib/pa11y', function() {
 					'notice',
 					'warning'
 				],
+				includePasses: false,
 				levelCapWhenNeedsReview: 'error',
 				pa11yVersion: pkg.version,
+				passContextMaxDepth: null,
+				passContextMaxLength: null,
+				passContextTrimAbove: null,
 				rootElement: pa11y.defaults.rootElement,
 				rules: pa11y.defaults.rules,
 				runners: [
@@ -414,6 +418,46 @@ describe('lib/pa11y', function() {
 				assert.deepEqual(puppeteer.mockPage.evaluate.thirdCall.args[1].ignore, [
 					'notice'
 				]);
+			});
+
+		});
+
+		describe('when `options.includePasses` is `true`', function() {
+
+			beforeEach(async function() {
+				puppeteer.mockPage.evaluate.resetHistory();
+				options.includePasses = true;
+				await pa11y(options);
+			});
+
+			it('forwards it to the page', function() {
+				assert.isTrue(puppeteer.mockPage.evaluate.thirdCall.args[1].includePasses);
+			});
+
+			it('does not change the default ignore list', function() {
+				assert.deepEqual(puppeteer.mockPage.evaluate.thirdCall.args[1].ignore, [
+					'notice',
+					'warning'
+				]);
+			});
+
+		});
+
+		describe('when the pass context options are set', function() {
+
+			beforeEach(async function() {
+				puppeteer.mockPage.evaluate.resetHistory();
+				options.passContextTrimAbove = 1000;
+				options.passContextMaxDepth = 4;
+				options.passContextMaxLength = 32768;
+				await pa11y(options);
+			});
+
+			it('forwards the pass context options to the page', function() {
+				const runOptions = puppeteer.mockPage.evaluate.thirdCall.args[1];
+				assert.strictEqual(runOptions.passContextTrimAbove, 1000);
+				assert.strictEqual(runOptions.passContextMaxDepth, 4);
+				assert.strictEqual(runOptions.passContextMaxLength, 32768);
 			});
 
 		});
@@ -1196,8 +1240,24 @@ describe('lib/pa11y', function() {
 			assert.isFalse(pa11y.defaults.includeNotices);
 		});
 
+		it('has an `includePasses` property', function() {
+			assert.isFalse(pa11y.defaults.includePasses);
+		});
+
 		it('has an `includeWarnings` property', function() {
 			assert.isFalse(pa11y.defaults.includeWarnings);
+		});
+
+		it('has a `passContextMaxDepth` property', function() {
+			assert.isNull(pa11y.defaults.passContextMaxDepth);
+		});
+
+		it('has a `passContextMaxLength` property', function() {
+			assert.isNull(pa11y.defaults.passContextMaxLength);
+		});
+
+		it('has a `passContextTrimAbove` property', function() {
+			assert.isNull(pa11y.defaults.passContextTrimAbove);
 		});
 
 		it('has a `log` property', function() {

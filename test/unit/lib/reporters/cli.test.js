@@ -137,6 +137,35 @@ describe('lib/reporters/cli', function() {
 
 		});
 
+		describe('when `pa11yResults` has passes (with `includePasses`)', function() {
+
+			beforeEach(function() {
+				mockPa11yResults.issues = [
+					{
+						type: 'pass',
+						code: 'mock-code-4',
+						message: 'mock-message-4',
+						context: 'mock-context-4',
+						selector: 'mock-selector-4'
+					}
+				];
+			});
+
+			it('labels them as passes and does not count them as errors, warnings, or notices', function() {
+				assert.strictEqual(cliReporter.results(mockPa11yResults), `
+					Results for URL: http://mock-url/
+
+					 • Pass: mock-message-4
+					   ├── mock-code-4
+					   ├── mock-selector-4
+					   └── mock-context-4
+
+
+				`.replace(/\t+/g, ''));
+			});
+
+		});
+
 		describe('when `pa11yResults` has no issues', function() {
 
 			beforeEach(function() {

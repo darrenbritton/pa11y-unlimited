@@ -1,0 +1,5 @@
+{
+	"includePasses": true,
+	"passContextTrimAbove": 40,
+	"passContextMaxDepth": 1
+}

@@ -1,5 +1,17 @@
 # Changelog
 
+## 9.10.0 (2026-11-06)
+
+* Add an opt-in `includePasses` option. With it set, the axe runner also reports each passing node as a result typed `pass` (`typeCode` `4`), after the violations and incompletes. Passes never go through the error/warning/notice level logic, no type entry in `ignore` drops one, and the CLI's `--level` and `threshold` never count one. Off by default, so existing callers see no change. Passes are large: a pass carries its element's full HTML as `context`, so a page-level pass carries the whole page; see the pass context options below to shorten them.
+* Each pass keeps what axe recorded about it, as evidence of the pass: `runnerExtras.axeChecks` holds every check axe ran on the element (`any`, `all` and `none`, each check with its `id`, `impact`, `message`, `data` and `relatedNodes`), and `runnerExtras.axeTarget` and `axeHtml` hold axe's own selector and snippet, which identify the element itself when it is inside a shadow root (where the pass's `selector` and `context` name the shadow host) or an iframe (where they are empty).
+* Results now include `runnerDetails`, run-level details keyed by runner name. With `includePasses` set, the axe runner reports its `testEngine`, `testRunner`, `testEnvironment`, `timestamp`, `url`, `toolOptions` and `inapplicable` rules, as axe returns them; otherwise it's empty.
+* Add opt-in options to shorten pass contexts. `passContextMaxDepth` rebuilds a context longer than `passContextTrimAbove` characters from the element and its descendants down to that many levels, keeping the last level as empty tags, so nothing nearer the element is lost. `passContextMaxLength` is a safety net that then cuts a context still longer than that many characters. A shortened context records `runnerExtras.contextFullLength`, and `runnerExtras.contextTrimmed` (`depth` or `length`). Other result types are never shortened. A pass on `<html>` is never depth-limited, but `passContextMaxLength` still cuts it, since each one carries the whole page. All unset by default, so contexts stay whole.
+* Results now include `runnerVersions`, the version of each runner's engine that ran in the page, keyed by runner name; the axe runner reports `axe.version`, for example `{axe: '4.11.1'}`. It sits beside `issues`, and every reporter prints only `issues`, so CLI output is unchanged.
+
+### Full diff for `pa11y-unlimited@9.10.0`
+
+* [v9.9.2...v9.10.0](https://github.com/darrenbritton/pa11y-unlimited/compare/v9.9.2...v9.10.0)
+
 ## 9.9.2 (2026-10-21)
 
 * Prefer a visible match for bare XPath selectors: waits, frame selection, clicks and fills now consider every match instead of the first, so a hidden duplicate earlier in the page (`display: none`, `visibility: hidden`, or inside an `aria-hidden="true"` subtree) no longer claims the action and fails with "Node is either not clickable or not an Element". A wait for `hidden` now needs every match hidden. CSS selectors are unchanged. (#27)

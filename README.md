@@ -124,7 +124,7 @@ By default, only accessibility issues with a type of `error` will exit with a co
 
 - `error`: exit with a code of `2` on errors only, exit with a code of `0` on warnings and notices
 - `warning`: exit with a code of `2` on errors and warnings, exit with a code of `0` on notices
-- `notice`: exit with a code of `2` on errors, warnings, and notices
+- `notice`: exit with a code of `2` on errors, warnings, and notices (passes, from [`includePasses`](#includepasses-boolean), are never counted)
 - `none`: always exit with a code of `0`
 
 ### Command-line configuration
@@ -244,9 +244,17 @@ Pa11y resolves with a `results` object, containing details about the page, and a
             type: 'error',
             typeCode: 1
         }
-    ]
+    ],
+    runnerVersions: {
+        axe: '4.11.1'
+    },
+    runnerDetails: {}
 }
 ```
+
+`runnerVersions` holds the version of each runner's engine that ran in the page, keyed by runner name. The `axe` runner reports `axe.version`. A runner that reports no version has no entry.
+
+`runnerDetails` holds run-level details from each runner, keyed by runner name. The `axe` runner reports them only with [`includePasses`](#includepasses-boolean) set: `testEngine`, `testRunner`, `testEnvironment` (user agent, window size and orientation), `timestamp`, `url`, `toolOptions` (the options axe ran with, including the rule tags) and `inapplicable` (the rules that found nothing on the page to check), each as axe returns it. A runner that reports no details has no entry.
 
 ### Transforming the results
 
@@ -436,6 +444,32 @@ pa11y(url, {
 
 Defaults to `false`.
 
+### `includePasses` (boolean)
+
+Whether to include the elements that each rule checked and found no problem with, as results with a type of `pass` (`typeCode` `4`). Only used by the axe runner; other runners ignore it. This is opt-in: with it unset or `false`, no passes are reported, and the other results are unchanged (`runnerVersions` and `runnerDetails` are always present).
+
+Each pass keeps what axe recorded about it in `runnerExtras`, as evidence of the pass:
+
+- `axeChecks`: every check axe ran on the element, as `{any, all, none}`, each check with all its fields: `id`, `impact`, `message`, `data` (what axe measured or found, for example the colours and contrast ratio for `color-contrast`) and `relatedNodes` (other elements the check relied on, such as the `<label>` that names an input, each with its `target` and `html`).
+- `axeTarget` and `axeHtml`: axe's own selector and HTML snippet for the element. They identify the element itself where the pass's `selector` and `context` can't: inside a shadow root, those name the shadow host, and inside an iframe they are empty.
+
+With it set, the axe runner also reports its run-level details in `results.runnerDetails.axe` (see [the results object](#javascript-interface)).
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true
+});
+```
+
+Each pass is a node from axe's `passes` results, reported with the same `code`, `message`, `selector`, and `context` fields as an issue, and `runnerExtras.isPass` set to `true`. A pass is always typed `pass`: it is never mapped to `error`, `warning`, or `notice` from axe's impact. On a passing node axe's impact is `null`, and the rule-level impact on a `passes` entry is either `null` or borrowed from the same rule's failures elsewhere on the page, so `runnerExtras.impact` is `null` for passes. Passes do not include the extra `runnerExtras` data collected for issues that need review.
+
+`includePasses` is the only switch for passes. The type entries in [`ignore`](#ignore-array), including the `notice` and `warning` entries added by default, never remove a pass. A rule code in `ignore` still removes every result for that rule, passes included. On the command line (set `includePasses` in a [configuration file](#command-line-configuration)), passes are never counted towards [`level`](#level-string) or [`threshold`](#threshold-number).
+
+Passes greatly increase the size of the results. Expect many more passes than issues on a typical page. By default Pa11y does not shorten `context`, so a pass on a large element, or a page-level pass (for example `html-has-lang` or `document-title`, whose element is `<html>`), carries that element's full HTML. Use [`passContextMaxDepth`](#passcontextmaxdepth-number), [`passContextTrimAbove`](#passcontexttrimabove-number) and [`passContextMaxLength`](#passcontextmaxlength-number) to limit it.
+
+Defaults to `false`.
+
 ### `includeWarnings` (boolean)
 
 Whether to include results with a type of `warning` in the Pa11y report. Issues with a type of `warning` are not directly actionable and so they are excluded by default. You can include them by using this option:
@@ -497,6 +531,45 @@ pa11y(url, {
 ```
 
 Defaults to `GET`.
+
+### `passContextMaxDepth` (number)
+
+How many levels of nested elements to keep in a long pass's `context`, used with [`includePasses`](#includepasses-boolean). When a pass's context is longer than [`passContextTrimAbove`](#passcontexttrimabove-number) characters (or any context, when that is unset), Pa11y rebuilds it from the element and its descendants down to this many levels below it. Elements at that last level are kept as empty tags; text, attributes and comments nearer the element are kept as they are. The shortened context records its full length in `runnerExtras.contextFullLength` and `runnerExtras.contextTrimmed: 'depth'`.
+
+Nothing nearer the element than the limit is lost. If your own processing reads only a few levels of an element's HTML, set this above that depth, and check the result against full contexts on real pages: an HTML parser can shift the depth it sees, for example by dropping table tags found outside a table. It never affects other result types, or a pass on the document element (`<html>`), whose page-level checks are about the whole page; only [`passContextMaxLength`](#passcontextmaxlength-number) cuts that. Anything other than a whole number above zero means no limit.
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true,
+    passContextTrimAbove: 1000,
+    passContextMaxDepth: 6
+});
+```
+
+Defaults to `null` (no limit).
+
+### `passContextMaxLength` (number)
+
+A safety net for the size of a pass's `context`, used with [`includePasses`](#includepasses-boolean). A context still longer than this many characters, after any [`passContextMaxDepth`](#passcontextmaxdepth-number) limit, is cut to this length, and `runnerExtras.contextTrimmed` is `length` rather than `depth`, because content may have been lost. The cut falls on raw HTML, so it can land inside a tag. It never affects other result types. It does cut a pass on `<html>`, which is never depth-limited and carries the whole page. Anything other than a whole number above zero means no limit.
+
+Use it to keep a large page's results small enough to pass from the browser back to Node: Puppeteer refuses a single message over 256 MB. `runnerExtras.axeHtml` always holds axe's own short snippet of the element.
+
+```js
+pa11y(url, {
+    runners: ['axe'],
+    includePasses: true,
+    passContextMaxLength: 131072
+});
+```
+
+Defaults to `null` (no limit).
+
+### `passContextTrimAbove` (number)
+
+The length in characters above which [`passContextMaxDepth`](#passcontextmaxdepth-number) shortens a pass's `context`. A context of this length or shorter is kept whole. Set it to the length below which your own processing keeps a context as it is, so Pa11y only shortens contexts you would trim anyway. Anything other than a whole number above zero means every context is considered.
+
+Defaults to `null`.
 
 ### `postData` (string)
 
@@ -887,6 +960,8 @@ The `run` method is called with two arguments:
 - `pa11y`: The Pa11y test runner, which includes some helper methods:
   - `pa11y.getElementContext(element)`: Get a short HTML context snippet for an element
   - `pa11y.getElementSelector(element)`: Get a unique selector with which you can select this element in a page
+  - `pa11y.runnerVersions`: An object the runner can add its engine's version to, keyed by the runner's name. Pa11y resolves with it as `results.runnerVersions`
+  - `pa11y.runnerDetails`: An object the runner can add run-level details to, keyed by the runner's name. Pa11y resolves with it as `results.runnerDetails`
 
 The `run` method _must_ resolve with an array of Pa11y issues. These follow the format:
 
@@ -895,7 +970,7 @@ The `run` method _must_ resolve with an array of Pa11y issues. These follow the 
     code: '123', // An identifier for this error
     element: {}, // The HTML element this issue relates to; `null` if no element is involved
     message: 'example', // A description of the issue
-    type: 'error', // 'error', 'warning', or 'notice'
+    type: 'error', // 'error', 'warning', or 'notice' ('pass' is reserved for passes, see `includePasses`)
     runnerExtras: {} // Additional data a runner is free to provide; unused by Pa11y itself
 }
 ```

@@ -267,7 +267,8 @@ function reportShouldFail(level, results, threshold) {
 		return false;
 	}
 	if (level === 'notice') {
-		return (results.length > threshold);
+		// Passes (only present with `includePasses`) are evidence, never a failure
+		return (results.filter(isNotPass).length > threshold);
 	}
 	if (level === 'warning') {
 		return (results.filter(isWarningOrError).length > threshold);
@@ -281,6 +282,10 @@ function isError(result) {
 
 function isWarningOrError(result) {
 	return (result.type === 'warning' || result.type === 'error');
+}
+
+function isNotPass(result) {
+	return (result.type !== 'pass');
 }
 
 /**
